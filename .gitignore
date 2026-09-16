@@ -1,0 +1,4 @@
+# Ignore compiled playdate build outputs
+*.pdx/
+.DS_Store
+build/
