@@ -58,17 +58,17 @@ local rooms = {
     -- Middle Row Rooms
     { name = "Library",      x = 50,  y = 217, w = 186, h = 108, img = roomBackgrounds.library,      mask = roomBackgrounds.libraryMask },
     { name = "Game Room",    x = 50,  y = 388, w = 156, h = 126, img = roomBackgrounds.game,         mask = roomBackgrounds.gameRoomMask },
-    { name = "Dining Room",  x = 530, y = 304, w = 400, h = 200, img = roomBackgrounds.dining,       mask = roomBackgrounds.diningRoomMask },
+    { name = "Dining Room",  x = 536, y = 310, w = 168, h = 177, img = roomBackgrounds.dining,       mask = roomBackgrounds.diningRoomMask },
     
     -- Bottom Row Rooms
     { name = "Conservatory", x = 50,  y = 598, w = 159, h = 126, img = roomBackgrounds.conservatory, mask = roomBackgrounds.conservatoryMask },
     { name = "Ballroom",     x = 296, y = 541, w = 201, h = 144, img = roomBackgrounds.ballroom,     mask = roomBackgrounds.ballRoomMask },
     { name = "Kitchen",      x = 590, y = 568, w = 150, h = 153, img = roomBackgrounds.kitchen,      mask = roomBackgrounds.kitchenMask }
 }
+-- Inject separate ROOM_VIEW dimensions for the Dining Room safely via code injection
+rooms[6].maskW =400
+rooms[6].maskH = 200
 
--- ==========================================================
--- RUNTIME INVERTED COLLISION MASK GENERATOR 
--- ==========================================================
 -- ==========================================================
 -- ROOM ASSET INITIALIZER
 -- ==========================================================
@@ -104,26 +104,28 @@ local function isWalkable(x, y)
     }
 
     if gameState == "ROOM_VIEW" and currentRoom and currentRoom.runtimeMask then
-        -- FIX: Use custom mask dimensions if they exist, otherwise fallback to image size
-        local maskW = currentRoom.maskW or currentRoom.runtimeMask:getSize()
-        local maskH = currentRoom.maskH or select(2, currentRoom.runtimeMask:getSize())
+        -- Allow boundary reading up to the full image canvas (400px)
+        local maskW, maskH = currentRoom.runtimeMask:getSize()
         
         for _, pt in ipairs(points) do
             local localX = math.floor(pt.x - currentRoom.x)
             local localY = math.floor(pt.y - currentRoom.y)
             
-            -- Keep player strictly inside your custom ROOM_VIEW boundaries
             if localX < 0 or localX >= maskW or localY < 0 or localY >= maskH then
-                return false -- Soft block at the custom dimensions
+                return false 
             else
                 local color = currentRoom.runtimeMask:sample(localX, localY)
                 if color == gfx.kColorWhite or color == 1 then
-                    return false -- Hard block at visual wall stroke
+                    -- Exception: Ignore the line at 255-260 in the Dining Room
+                    if currentRoom.name == "Dining Room" and localX >= 255 and localX <= 260 then
+                        -- Allow walking through
+                    else
+                        return false 
+                    end
                 end
             end
         end
     else
-        -- Default: Handle exploration collision on the main map grid
         if maskImage then
             local maskW, maskH = maskImage:getSize()
             for _, pt in ipairs(points) do
@@ -218,42 +220,6 @@ local function handleDpadInput()
                 if selectedIndex > #checklist then selectedIndex = 1 end
             end
         end
-        -- DYNAMIC BOUNDARY SETUP BASED ON ENGINE STATE
-        local minX, maxX, minY, maxY
-        if gameState == "ROOM_VIEW" and currentRoom and currentRoom.runtimeMask then
-            -- FIX: Use custom dimensions for clamping if they exist
-            local maskW = currentRoom.maskW or currentRoom.runtimeMask:getSize()
-            local maskH = currentRoom.maskH or select(2, currentRoom.runtimeMask:getSize())
-            
-            minX = currentRoom.x
-            maxX = currentRoom.x + maskW - playerSize
-            minY = currentRoom.y
-            maxY = currentRoom.y + maskH - playerSize
-        else
-            -- Constrain to global map boundaries
-            minX = 0
-            maxX = MAP_WIDTH - playerSize
-            minY = 0
-            maxY = MAP_HEIGHT - playerSize
-        end
-        -- DYNAMIC BOUNDARY SETUP BASED ON ENGINE STATE
-        local minX, maxX, minY, maxY
-        if gameState == "ROOM_VIEW" and currentRoom and currentRoom.runtimeMask then
-            -- FIX: Use custom dimensions for clamping if they exist
-            local maskW = currentRoom.maskW or currentRoom.runtimeMask:getSize()
-            local maskH = currentRoom.maskH or select(2, currentRoom.runtimeMask:getSize())
-            
-            minX = currentRoom.x
-            maxX = currentRoom.x + maskW - playerSize
-            minY = currentRoom.y
-            maxY = currentRoom.y + maskH - playerSize
-        else
-            -- Constrain to global map boundaries
-            minX = 0
-            maxX = MAP_WIDTH - playerSize
-            minY = 0
-            maxY = MAP_HEIGHT - playerSize
-        end
 
         if selectedIndex - scrollOffset > 7 then
             scrollOffset = selectedIndex - 7
@@ -267,146 +233,204 @@ local function handleDpadInput()
         
         if playdate.buttonJustPressed(playdate.kButtonUp) or
            playdate.buttonJustPressed(playdate.kButtonDown) or
-playdate.buttonJustPressed(playdate.kButtonLeft) or
-playdate.buttonJustPressed(playdate.kButtonRight) then
-buttonPressedThisFrame = true
+           playdate.buttonJustPressed(playdate.kButtonLeft) or
+           playdate.buttonJustPressed(playdate.kButtonRight) then
+            buttonPressedThisFrame = true
+        end
+
+        if playerTilesLeft > 0 then
+            if playdate.buttonIsPressed(playdate.kButtonUp) then dy = -playerSpeed end
+            if playdate.buttonIsPressed(playdate.kButtonDown) then dy = playerSpeed end
+            if playdate.buttonIsPressed(playdate.kButtonLeft) then dx = -playerSpeed end
+            if playdate.buttonIsPressed(playdate.kButtonRight) then dx = playerSpeed end
+        end
+
+        -- Define movement boundaries dynamically directly inside the movement loop
+        local minX, maxX, minY, maxY
+        if gameState == "ROOM_VIEW" and currentRoom then
+            minX = currentRoom.x
+            maxX = currentRoom.x + 400 - playerSize
+            minY = currentRoom.y
+            maxY = currentRoom.y + 200 - playerSize
+        else
+            minX = 0
+            maxX = MAP_WIDTH - playerSize
+            minY = 0
+            maxY = MAP_HEIGHT - playerSize
+        end
+
+        if dx ~= 0 or dy ~= 0 then
+            local moved = false
+            if dx ~= 0 then
+                local targetX = playerX + dx
+                if targetX >= minX and targetX <= maxX then
+                    if isWalkable(targetX, playerY) then
+                        playerX = targetX
+                        moved = true
+                    end
+                end
+            end
+            if dy ~= 0 then
+                local targetY = playerY + dy
+                if targetY >= minY and targetY <= maxY then
+                    if isWalkable(playerX, targetY) then
+                        playerY = targetY
+                        moved = true
+                    end
+                end
+            end
+
+            if moved then
+                if buttonPressedThisFrame then
+                    playerTilesLeft = playerTilesLeft - 1
+                    pixelRemainder = 0
+                else
+                    pixelRemainder = pixelRemainder + playerSpeed
+                    if pixelRemainder >= 16 then
+                        playerTilesLeft = playerTilesLeft - 1
+                        pixelRemainder = pixelRemainder - 16
+                    end
+                end
+
+                -- Handle transitioning from the map grid into a focused room view
+                if gameState == "MAP" then
+                    local newRoom = checkRoomTransitions(playerX, playerY)
+                    if newRoom and newRoom ~= currentRoom then
+                        currentRoom = newRoom
+                        gameState = "ROOM_VIEW"
+                        
+                        -- Custom entry point spawn mapping for the Dining Room doors
+                        if currentRoom.name == "Dining Room" then
+                            -- Left door entry threshold check
+                            if playerX <= 536 and playerY >= 370 and playerY <= 410 then
+                                playerX = 560 -- Safe global X inside the room (localX will be 30)
+                                playerY = 403
+                            end
+                        end
+                    end
+                -- Handle walking out of a room view back onto the global map grid
+                elseif gameState == "ROOM_VIEW" and currentRoom then
+                    local localX = playerX - currentRoom.x
+                    local localY = playerY - currentRoom.y
+                    
+                    -- Left Door Exit Zone Trigger
+                    -- Only trigger the exit if the player pushes tightly against the far left edge
+                    if currentRoom.name == "Dining Room" and localX <= 2 then
+                        gameState = "MAP"
+                        currentRoom = nil
+                        -- Place player further out into the hallway so they don't immediately touch the room entry box
+                        playerX = 524 
+                        playerY = 391
+                    else
+                        -- Standard fallback exit check if they walk out of the bounding box elsewhere
+                        local leftRoom = checkRoomTransitions(playerX, playerY)
+                        if not leftRoom then
+                            currentRoom = nil
+                            gameState = "MAP"
+                        end
+                    end
+                end
+            end
+        end
+
+        cameraX = playerX - (SCREEN_WIDTH / 2) + (playerSize / 2)
+        if cameraX < 0 then cameraX = 0
+        elseif cameraX > (MAP_WIDTH - SCREEN_WIDTH) then cameraX = MAP_WIDTH - SCREEN_WIDTH end
+        cameraY = playerY - (SCREEN_HEIGHT / 2) + (playerSize / 2)
+        if cameraY < 0 then cameraY = 0
+        elseif cameraY > (MAP_HEIGHT - SCREEN_HEIGHT) then cameraY = MAP_HEIGHT - SCREEN_HEIGHT end
+    end
 end
-if playerTilesLeft > 0 then
-if playdate.buttonIsPressed(playdate.kButtonUp) then dy = -playerSpeed end
-if playdate.buttonIsPressed(playdate.kButtonDown) then dy = playerSpeed end
-if playdate.buttonIsPressed(playdate.kButtonLeft) then dx = -playerSpeed end
-if playdate.buttonIsPressed(playdate.kButtonRight) then dx = playerSpeed end
-end
-if dx ~= 0 or dy ~= 0 then
-local moved = false
-if dx ~= 0 then
-local targetX = playerX + dx
-if targetX >= 0 and targetX <= (MAP_WIDTH - playerSize) then
-if isWalkable(targetX, playerY) then
-playerX = targetX
-moved = true
-end
-end
-end
-if dy ~= 0 then
-local targetY = playerY + dy
-if targetY >= 0 and targetY <= (MAP_HEIGHT - playerSize) then
-if isWalkable(playerX, targetY) then
-playerY = targetY
-moved = true
-end
-end
-end
-if moved then
-if buttonPressedThisFrame then
-playerTilesLeft = playerTilesLeft - 1
-pixelRemainder = 0
-else
-pixelRemainder = pixelRemainder + playerSpeed
-if pixelRemainder >= 16 then
-playerTilesLeft = playerTilesLeft - 1
-pixelRemainder = pixelRemainder - 16
-end
-end
-local newRoom = checkRoomTransitions(playerX, playerY)
-if newRoom then
-if newRoom ~= currentRoom then
-currentRoom = newRoom
-gameState = "ROOM_VIEW"
-end
-else
-currentRoom = nil
-gameState = "MAP"
-end
-end
-end
-cameraX = playerX - (SCREEN_WIDTH / 2) + (playerSize / 2)
-if cameraX < 0 then cameraX = 0
-elseif cameraX > (MAP_WIDTH - SCREEN_WIDTH) then cameraX = MAP_WIDTH - SCREEN_WIDTH end
-cameraY = playerY - (SCREEN_HEIGHT / 2) + (playerSize / 2)
-if cameraY < 0 then cameraY = 0
-elseif cameraY > (MAP_HEIGHT - SCREEN_HEIGHT) then cameraY = MAP_HEIGHT - SCREEN_HEIGHT end
-end
-end
+
 local function handleCrankInput()
-if playdate.isCrankDocked() then
-if gameState == "MAP_FULL" then gameState = "MAP" end
-return
+    if playdate.isCrankDocked() then
+        if gameState == "MAP_FULL" then gameState = "MAP" end
+        return
+    end
+    if gameState ~= "NOTEPAD" then
+        local crankChange = playdate.getCrankChange()
+        if crankChange > 2 then gameState = "MAP_FULL"
+        elseif crankChange < -2 then gameState = "MAP" end
+    end
 end
-if gameState ~= "NOTEPAD" then
-local crankChange = playdate.getCrankChange()
-if crankChange > 2 then gameState = "MAP_FULL"
-elseif crankChange < -2 then gameState = "MAP" end
-end
-end
+
 -- ==========================================================
 -- MAIN DRAW LOOP
 -- ==========================================================
 function playdate.update()
-gfx.clear()
-handleDpadInput()
-handleCrankInput()
-playdate.display.setScale(1)
-if gameState == "MAP" then
-if roomBackgrounds.mansion then
-roomBackgrounds.mansion:draw(-cameraX, -cameraY)
-end
-gfx.setColor(gfx.kColorWhite)
-gfx.fillEllipseInRect(playerX - cameraX, playerY - cameraY, playerSize, playerSize)
-gfx.setColor(gfx.kColorBlack)
-gfx.drawEllipseInRect(playerX - cameraX, playerY - cameraY, playerSize, playerSize)
-gfx.setColor(gfx.kColorBlack)
-gfx.fillRect(0, 0, SCREEN_WIDTH, 20)
-gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
-gfx.drawText(string.format("STEPS: %i | ACCUSATIONS: %i", playerTilesLeft, totalAccusationsLeft), 10, 2)
-gfx.setColor(gfx.kColorBlack)
-gfx.fillRect(0, SCREEN_HEIGHT - 20, SCREEN_WIDTH, 20)
-local roomString = "Path"
-if currentRoom then
-roomString = string.format("Room: %s", currentRoom.name)
-elseif playerTilesLeft == 0 then
-roomString = "OUT OF STEPS!"
-end
-local bottomHudText = string.format("%s | X: %i, Y: %i", roomString, playerX, playerY)
-gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
-gfx.drawText(bottomHudText, 10, SCREEN_HEIGHT - 18)
-gfx.setImageDrawMode(gfx.kDrawModeCopy)
-elseif gameState == "MAP_FULL" then
-if roomBackgrounds.board then
-local boardWidth, boardHeight = roomBackgrounds.board:getSize()
-local centeredX = (SCREEN_WIDTH - boardWidth) / 2
-local centeredY = (SCREEN_HEIGHT - boardHeight) / 2
-roomBackgrounds.board:draw(centeredX, centeredY)
-end
-elseif gameState == "ROOM_VIEW" then
-if currentRoom and currentRoom.img then
-currentRoom.img:draw(0, 20)
-else
-gfx.drawText("Error: Room asset missing!", 20, 20)
-end
-local localPlayerX = 200
-local localPlayerY = 120
-if currentRoom then
-localPlayerX = playerX - currentRoom.x
-localPlayerY = (playerY - currentRoom.y) + 20
-end
-gfx.setColor(gfx.kColorWhite)
-gfx.fillEllipseInRect(localPlayerX, localPlayerY, playerSize, playerSize)
-gfx.setColor(gfx.kColorBlack)
-gfx.drawEllipseInRect(localPlayerX, localPlayerY, playerSize, playerSize)
-gfx.setColor(gfx.kColorBlack)
-gfx.fillRect(0, 0, SCREEN_WIDTH, 20)
-gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
-gfx.drawText(string.format("STEPS: %i | ACCUSATIONS: %i", playerTilesLeft, totalAccusationsLeft), 10, 2)
-gfx.setColor(gfx.kColorBlack)
-gfx.fillRect(0, SCREEN_HEIGHT - 20, SCREEN_WIDTH, 20)
-local roomName = currentRoom and currentRoom.name or "Unknown"
-local debugText = string.format("%s | World: %i,%i | Room: %i,%i", roomName, playerX, playerY, localPlayerX, localPlayerY - 20)
-gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
-gfx.drawText(debugText, 6, SCREEN_HEIGHT - 18)
-gfx.setImageDrawMode(gfx.kDrawModeCopy)
-elseif gameState == "NOTEPAD" then
-gfx.drawText("DETECTIVE NOTEPAD", 125, 8)
+    gfx.clear()
+    handleDpadInput()
+    handleCrankInput()
+    playdate.display.setScale(1)
+    
+    if gameState == "MAP" then
+        if roomBackgrounds.mansion then
+            roomBackgrounds.mansion:draw(-cameraX, -cameraY)
+        end
+        gfx.setColor(gfx.kColorWhite)
+        gfx.fillEllipseInRect(playerX - cameraX, playerY - cameraY, playerSize, playerSize)
+        gfx.setColor(gfx.kColorBlack)
+        gfx.drawEllipseInRect(playerX - cameraX, playerY - cameraY, playerSize, playerSize)
+        gfx.setColor(gfx.kColorBlack)
+        gfx.fillRect(0, 0, SCREEN_WIDTH, 20)
+        gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
+        gfx.drawText(string.format("STEPS: %i | ACCUSATIONS: %i", playerTilesLeft, totalAccusationsLeft), 10, 2)
+        gfx.setColor(gfx.kColorBlack)
+        gfx.fillRect(0, SCREEN_HEIGHT - 20, SCREEN_WIDTH, 20)
+        
+        local roomString = "Path"
+        if currentRoom then
+            roomString = string.format("Room: %s", currentRoom.name)
+        elseif playerTilesLeft == 0 then
+            roomString = "OUT OF STEPS!"
+        end
+        
+        local bottomHudText = string.format("%s | X: %i, Y: %i", roomString, playerX, playerY)
+        gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
+        gfx.drawText(bottomHudText, 10, SCREEN_HEIGHT - 18)
+        gfx.setImageDrawMode(gfx.kDrawModeCopy)
+        
+    elseif gameState == "MAP_FULL" then
+        if roomBackgrounds.board then
+            local boardWidth, boardHeight = roomBackgrounds.board:getSize()
+            local centeredX = (SCREEN_WIDTH - boardWidth) / 2
+            local centeredY = (SCREEN_HEIGHT - boardHeight) / 2
+            roomBackgrounds.board:draw(centeredX, centeredY)
+        end
+        
+    elseif gameState == "ROOM_VIEW" then
+        if currentRoom and currentRoom.img then
+            currentRoom.img:draw(0, 20)
+        else
+            gfx.drawText("Error: Room asset missing!", 20, 20)
+        end
+        
+        local localPlayerX = 200
+        local localPlayerY = 120
+        if currentRoom then
+            localPlayerX = playerX - currentRoom.x
+            localPlayerY = (playerY - currentRoom.y) + 20
+        end
+        
+        gfx.setColor(gfx.kColorWhite)
+        gfx.fillEllipseInRect(localPlayerX, localPlayerY, playerSize, playerSize)
+        gfx.setColor(gfx.kColorBlack)
+        gfx.drawEllipseInRect(localPlayerX, localPlayerY, playerSize, playerSize)
+        gfx.setColor(gfx.kColorBlack)
+        gfx.fillRect(0, 0, SCREEN_WIDTH, 20)
+        gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
+        gfx.drawText(string.format("STEPS: %i | ACCUSATIONS: %i", playerTilesLeft, totalAccusationsLeft), 10, 2)
+        gfx.setColor(gfx.kColorBlack)
+        gfx.fillRect(0, SCREEN_HEIGHT - 20, SCREEN_WIDTH, 20)
+        
+        local roomName = currentRoom and currentRoom.name or "Unknown"
+        local debugText = string.format("%s | World: %i,%i | Room: %i,%i", roomName, playerX, playerY, localPlayerX, localPlayerY - 20)
+        gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
+        gfx.drawText(debugText, 6, SCREEN_HEIGHT - 18)
+        gfx.setImageDrawMode(gfx.kDrawModeCopy)
+        
+    elseif gameState == "NOTEPAD" then
+        gfx.drawText("DETECTIVE NOTEPAD", 125, 8)
 gfx.drawLine(20, 24, 380, 24)
 local maxRows = 8
 for i = 1, maxRows do
@@ -431,4 +455,3 @@ end
 end
 end
 end
-
