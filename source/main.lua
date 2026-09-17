@@ -83,7 +83,32 @@ end
 
 -- Simulated Player Position & Dimensions
 local playerX = 500 
-local playerY = 400
+-- ==========================================================
+-- RANDOM SUSPECT SPAWN CONFIGURATION
+-- ==========================================================
+local startingSpawns = {
+    { x = 734, y = 247 }, -- Right side top
+    { x = 734, y = 538 }, -- Right side bottom
+    { x = 470, y = 742 }, -- Bottom side right
+    { x = 323, y = 742 }, -- Bottom side left
+    { x = 56,  y = 568 }, -- Left side bottom
+    { x = 56,  y = 190 }, -- Left side top
+    { x = 266, y = 49  }, -- Top side left
+    { x = 527, y = 49  }  -- Top side right
+}
+
+-- Seed the randomizer using the Playdate's internal clock system
+math.randomseed(playdate.getSecondsSinceEpoch())
+
+-- Pick one of the 8 spots out of the hat
+local chosenSpawnIndex = math.random(1, #startingSpawns)
+local selectedSpawn = startingSpawns[chosenSpawnIndex]
+
+-- Assign your original variables to the newly selected random location!
+local playerX = selectedSpawn.x
+local playerY = selectedSpawn.y
+
+-- Simulated Player Dimensions & Speeds
 local playerSize = 12 
 local playerSpeed = 3          
 local pixelRemainder = 0       
