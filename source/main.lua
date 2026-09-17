@@ -21,6 +21,11 @@ local maskImage = gfx.image.new("images/mask_map")
 if not maskImage then
     print("Warning: Could not load images/mask_map.png")
 end
+-- Load your custom 12x12 player sprite asset once globally
+local playerSpriteImage = gfx.image.new("images/player")
+if not playerSpriteImage then
+    print("Warning: Could not load images/player.png")
+end
 
 -- ==========================================================
 -- ROOM ASSETS & ASSET SIZE OFFSET CALCULATORS
@@ -209,14 +214,19 @@ local checklist = {
 local selectedIndex = 2 
 local scrollOffset = 0
 
+-- Track the previous state before entering the notepad
+local stateBeforeNotepad = "MAP"
+
 function playdate.BButtonDown()
-    if gameState == "NOTEPAD" or gameState == "MAP_FULL" or gameState == "ROOM_VIEW" then
-        if gameState == "ROOM_VIEW" then
-            -- Optional safety bounce: move player backward so they don't immediately re-trigger it
+    if gameState == "NOTEPAD" then
+        -- Close the notepad and return to exactly where you were (MAP or ROOM_VIEW)
+        gameState = stateBeforeNotepad
+    else
+        -- Only allow opening the notepad if you are actively walking around
+        if gameState == "MAP" or gameState == "ROOM_VIEW" then
+            stateBeforeNotepad = gameState -- Remember if we were in the hallway or a room
+            gameState = "NOTEPAD"
         end
-        gameState = "MAP"
-    elseif gameState == "MAP" then
-        gameState = "NOTEPAD"
     end
 end
 
@@ -464,15 +474,23 @@ elseif cameraY > (MAP_HEIGHT - SCREEN_HEIGHT) then cameraY = MAP_HEIGHT - SCREEN
 end -- Close Main game block
 end -- Close handleDpadInput function
 local function handleCrankInput()
-if playdate.isCrankDocked() then
-if gameState == "MAP_FULL" then gameState = "MAP" end
-return
-end
-if gameState ~= "NOTEPAD" then
-local crankChange = playdate.getCrankChange()
-if crankChange > 2 then gameState = "MAP_FULL"
-elseif crankChange < -2 then gameState = "MAP" end
-end
+    -- 1. If the crank is docked, always drop back to the standard map view
+    if playdate.isCrankDocked() then
+        if gameState == "MAP_FULL" then gameState = "MAP" end
+        return
+    end
+    
+    -- 2. LOCKOUT RIGID STATE CHECKER
+    -- Only allow the crank to toggle the full-screen map if the player is explicitly
+    -- on the main map. If they are in the NOTEPAD or ROOM_VIEW, the crank is ignored.
+    if gameState == "MAP" or gameState == "MAP_FULL" then
+        local crankChange = playdate.getCrankChange()
+        if crankChange > 2 then 
+            gameState = "MAP_FULL"
+        elseif crankChange < -2 then 
+            gameState = "MAP" 
+        end
+    end
 end
 -- ==========================================================
 -- MAIN ENGINE UPDATE LOOP (KEEP AT THE VERY BOTTOM OF FILE)
@@ -485,19 +503,21 @@ handleCrankInput()
 -- Global scale initializer
 playdate.display.setScale(1)
 -- State Rendering Routers
-if gameState == "MAP" then
-if roomBackgrounds.mansion then
-roomBackgrounds.mansion:draw(-cameraX, -cameraY)
-end
-gfx.setColor(gfx.kColorWhite)
-gfx.fillEllipseInRect(playerX - cameraX, playerY - cameraY, playerSize, playerSize)
-gfx.setColor(gfx.kColorBlack)
-gfx.drawEllipseInRect(playerX - cameraX, playerY - cameraY, playerSize, playerSize)
--- Top HUD bar
-gfx.setColor(gfx.kColorBlack)
-gfx.fillRect(0, 0, SCREEN_WIDTH, 20)
-gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
-gfx.drawText(string.format("STEPS: %i | ACCUSATIONS: %i", playerTilesLeft, totalAccusationsLeft), 10, 2)
+    if gameState == "MAP" then
+        if roomBackgrounds.mansion then
+            roomBackgrounds.mansion:draw(-cameraX, -cameraY)
+        end
+        
+        -- DRAW SPRITE ON THE MAIN MAP (Using global camera offsets)
+        if playerSpriteImage then
+            playerSpriteImage:draw(playerX - cameraX, playerY - cameraY)
+        else
+            -- Backup safety circle if asset fails to load
+            gfx.setColor(gfx.kColorWhite)
+            gfx.fillEllipseInRect(playerX - cameraX, playerY - cameraY, playerSize, playerSize)
+            gfx.setColor(gfx.kColorBlack)
+            gfx.drawEllipseInRect(playerX - cameraX, playerY - cameraY, playerSize, playerSize)
+        end
 -- Bottom HUD bar
 gfx.setColor(gfx.kColorBlack)
 gfx.fillRect(0, SCREEN_HEIGHT - 20, SCREEN_WIDTH, 20)
@@ -511,29 +531,64 @@ local bottomHudText = string.format("%s | X: %i, Y: %i", roomString, playerX, pl
 gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
 gfx.drawText(bottomHudText, 10, SCREEN_HEIGHT - 18)
 gfx.setImageDrawMode(gfx.kDrawModeCopy)
-elseif gameState == "MAP_FULL" then
-if roomBackgrounds.board then
-local boardWidth, boardHeight = roomBackgrounds.board:getSize()
-local centeredX = (SCREEN_WIDTH - boardWidth) / 2
-local centeredY = (SCREEN_HEIGHT - boardHeight) / 2
-roomBackgrounds.board:draw(centeredX, centeredY)
-end
-elseif gameState == "ROOM_VIEW" then
-if currentRoom and currentRoom.img then
-currentRoom.img:draw(0, 20)
-else
-gfx.drawText("Error: Room asset missing!", 20, 20)
-end
-local localPlayerX = 200
-local localPlayerY = 120
-if currentRoom then
-localPlayerX = playerX - currentRoom.x
-localPlayerY = (playerY - currentRoom.y) + 20
-end
-gfx.setColor(gfx.kColorWhite)
-gfx.fillEllipseInRect(localPlayerX, localPlayerY, playerSize, playerSize)
-gfx.setColor(gfx.kColorBlack)
-gfx.drawEllipseInRect(localPlayerX, localPlayerY, playerSize, playerSize)
+    elseif gameState == "MAP_FULL" then
+        if roomBackgrounds.board then
+            -- 1. Draw the centered background board image
+            local boardWidth, boardHeight = roomBackgrounds.board:getSize()
+            local centeredX = (SCREEN_WIDTH - boardWidth) / 2
+            local centeredY = (SCREEN_HEIGHT - boardHeight) / 2
+            roomBackgrounds.board:draw(centeredX, centeredY)
+            
+            -- 2. Calculate player percentage position across the 800x800 world map
+            local percentX = playerX / MAP_WIDTH
+            local percentY = playerY / MAP_HEIGHT
+            
+            -- 3. Translate that percentage to the mini-map size, adding the screen centering offsets
+            -- We center the tracking point by subtracting half the player size (6px)
+            local targetX = centeredX + (percentX * boardWidth) - (playerSize / 2)
+            local targetY = centeredY + (percentY * boardHeight) - (playerSize / 2)
+            
+            -- 4. Draw a flashing or distinct location target marker
+            -- Using playdate.getElapsedTime() creates a clean, automatic blinking effect
+            if math.floor(playdate.getElapsedTime() * 4) % 2 == 0 then
+                -- Inner white core dot
+                gfx.setColor(gfx.kColorWhite)
+                gfx.fillEllipseInRect(targetX, targetY, playerSize, playerSize)
+                -- Outer black crosshair ring
+                gfx.setColor(gfx.kColorBlack)
+                gfx.drawEllipseInRect(targetX - 2, targetY - 2, playerSize + 4, playerSize + 4)
+            else
+                -- Off-flash phase: solid black point for visibility
+                gfx.setColor(gfx.kColorBlack)
+                gfx.fillEllipseInRect(targetX, targetY, playerSize, playerSize)
+                gfx.setColor(gfx.kColorWhite)
+                gfx.drawEllipseInRect(targetX, targetY, playerSize, playerSize)
+            end
+        end
+    elseif gameState == "ROOM_VIEW" then
+        if currentRoom and currentRoom.img then
+            currentRoom.img:draw(0, 20)
+        else
+            gfx.drawText("Error: Room asset missing!", 20, 20)
+        end
+        
+        local localPlayerX = 200
+        local localPlayerY = 120
+        if currentRoom then
+            localPlayerX = playerX - currentRoom.x
+            localPlayerY = (playerY - currentRoom.y) + 20
+        end
+        
+        -- DRAW SPRITE INSIDE ROOM VIEW (Using localized room view calculations)
+        if playerSpriteImage then
+            playerSpriteImage:draw(localPlayerX, localPlayerY)
+        else
+            -- Backup safety circle if asset fails to load
+            gfx.setColor(gfx.kColorWhite)
+            gfx.fillEllipseInRect(localPlayerX, localPlayerY, playerSize, playerSize)
+            gfx.setColor(gfx.kColorBlack)
+            gfx.drawEllipseInRect(localPlayerX, localPlayerY, playerSize, playerSize)
+        end
 -- Top Room HUD
 gfx.setColor(gfx.kColorBlack)
 gfx.fillRect(0, 0, SCREEN_WIDTH, 20)
