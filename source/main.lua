@@ -206,19 +206,17 @@ end
 local function handleDpadInput()
     if gameState == "NOTEPAD" then
         if playdate.buttonJustPressed(playdate.kButtonUp) then
-            selectedIndex = selectedIndex - 1
-            if selectedIndex < 1 then selectedIndex = #checklist end
-            while checklist[selectedIndex].isHeader do
+            local startingIndex = selectedIndex
+            repeat
                 selectedIndex = selectedIndex - 1
                 if selectedIndex < 1 then selectedIndex = #checklist end
-            end
+            until not checklist[selectedIndex].isHeader or selectedIndex == startingIndex
         elseif playdate.buttonJustPressed(playdate.kButtonDown) then
-            selectedIndex = selectedIndex + 1
-            if selectedIndex > #checklist then selectedIndex = 1 end
-            while checklist[selectedIndex].isHeader do
+            local startingIndex = selectedIndex
+            repeat
                 selectedIndex = selectedIndex + 1
                 if selectedIndex > #checklist then selectedIndex = 1 end
-            end
+            until not checklist[selectedIndex].isHeader or selectedIndex == startingIndex
         end
 
         if selectedIndex - scrollOffset > 7 then
@@ -245,7 +243,6 @@ local function handleDpadInput()
             if playdate.buttonIsPressed(playdate.kButtonRight) then dx = playerSpeed end
         end
 
-        -- Define movement boundaries dynamically directly inside the movement loop
         local minX, maxX, minY, maxY
         if gameState == "ROOM_VIEW" and currentRoom then
             minX = currentRoom.x
@@ -292,145 +289,243 @@ local function handleDpadInput()
                     end
                 end
 
-                -- Handle transitioning from the map grid into a focused room view
+                -- ==========================================================
+                -- 1. ENTRY LOGIC: MAP -> ROOM_VIEW
+                -- ==========================================================
                 if gameState == "MAP" then
                     local newRoom = checkRoomTransitions(playerX, playerY)
-                    if newRoom and newRoom ~= currentRoom then
+                    if newRoom then
                         currentRoom = newRoom
                         gameState = "ROOM_VIEW"
                         
-                        -- Custom entry point spawn mapping for the Dining Room doors
                         if currentRoom.name == "Dining Room" then
-                            -- Left door entry threshold check
-                            if playerX <= 536 and playerY >= 370 and playerY <= 410 then
-                                playerX = 560 -- Safe global X inside the room (localX will be 30)
-                                playerY = 403
+                            if math.abs(playerX - 530) <= 15 and math.abs(playerY - 391) <= 15 then
+                                playerX = 638 + 12; playerY = 403
+                            elseif math.abs(playerX - 563) <= 15 and math.abs(playerY - 304) <= 15 then
+                                playerX = 674; playerY = 322 + 12
+                            else
+                                playerX = 638 + 12; playerY = 403
+                            end
+                        elseif currentRoom.name == "Kitchen" then
+                            if math.abs(playerX - 617) <= 15 and math.abs(playerY - 565) <= 15 then
+                                playerX = 744; playerY = 584 + 12
+                            else
+                                playerX = 744; playerY = 584 + 12
+                            end
+                        elseif currentRoom.name == "Ballroom" then
+                            if math.abs(playerX - 290) <= 15 and math.abs(playerY - 598) <= 15 then
+                                playerX = 409 + 12; playerY = 605
+                            elseif math.abs(playerX - 326) <= 15 and math.abs(playerY - 535) <= 20 then
+                                playerX = 436; playerY = 557 + 12
+                            elseif math.abs(playerX - 464) <= 15 and math.abs(playerY - 535) <= 20 then
+                                playerX = 525; playerY = 557 + 12
+                            elseif math.abs(playerX - 506) <= 15 and math.abs(playerY - 598) <= 15 then
+                                playerX = 562 - 12; playerY = 605
+                            else
+                                playerX = 485; playerY = 580
+                            end
+                        elseif currentRoom.name == "Conservatory" then
+                            if math.abs(playerX - 210) <= 15 and math.abs(playerY - 598) <= 15 then
+                                playerX = 319 - 12; playerY = 635
+                            else
+                                playerX = 319 - 12; playerY = 635
+                            end
+                        elseif currentRoom.name == "Game Room" then
+                            if math.abs(playerX - 207) <= 15 and math.abs(playerY - 478) <= 15 then
+                                playerX = 331 - 12; playerY = 512
+                            elseif math.abs(playerX - 90) <= 15 and math.abs(playerY - 385) <= 15 then
+                                playerX = 205; playerY = 419 + 12
+                            else
+                                playerX = 331 - 12; playerY = 512
+                            end
+                        elseif currentRoom.name == "Library" then
+                            if math.abs(playerX - 147) <= 15 and math.abs(playerY - 337) <= 15 then
+                                playerX = 243; playerY = 384 - 12
+                            elseif math.abs(playerX - 243) <= 15 and math.abs(playerY - 274) <= 15 then
+                                playerX = 354 - 12; playerY = 309
+                            else
+                                playerX = 290; playerY = 296
+                            end
+                        elseif currentRoom.name == "Study" then
+                            if math.abs(playerX - 224) <= 15 and math.abs(playerY - 136) <= 15 then
+                                playerX = 361 - 12; playerY = 204
+                            else
+                                playerX = 300; playerY = 180
+                            end
+                        elseif currentRoom.name == "Lounge" then
+                            if math.abs(playerX - 566) <= 15 and math.abs(playerY - 196) <= 15 then
+                                playerX = 660; playerY = 215 - 12
+                            else
+                                playerX = 660; playerY = 150
+                            end
+                        elseif currentRoom.name == "Hall" then
+                            if math.abs(playerX - 398) <= 15 and math.abs(playerY - 220) <= 15 then
+                                playerX = 525; playerY = 222 - 12
+                            elseif math.abs(playerX - 323) <= 15 and math.abs(playerY - 157) <= 15 then
+                                playerX = 462 + 12; playerY = 174
+                            else
+                                playerX = 490; playerY = 160
                             end
                         end
                     end
-                -- Handle walking out of a room view back onto the global map grid
+
+                -- ==========================================================
+                -- 2. EXIT LOGIC: ROOM_VIEW -> MAP
+                -- ==========================================================
                 elseif gameState == "ROOM_VIEW" and currentRoom then
-                    local localX = playerX - currentRoom.x
-                    local localY = playerY - currentRoom.y
-                    
-                    -- Left Door Exit Zone Trigger
-                    -- Only trigger the exit if the player pushes tightly against the far left edge
-                    if currentRoom.name == "Dining Room" and localX <= 2 then
-                        gameState = "MAP"
-                        currentRoom = nil
-                        -- Place player further out into the hallway so they don't immediately touch the room entry box
-                        playerX = 524 
-                        playerY = 391
-                    else
-                        -- Standard fallback exit check if they walk out of the bounding box elsewhere
-                        local leftRoom = checkRoomTransitions(playerX, playerY)
-                        if not leftRoom then
-                            currentRoom = nil
-                            gameState = "MAP"
+                    if currentRoom.name == "Dining Room" then
+                        if math.abs(playerX - 638) <= playerSpeed and math.abs(playerY - 403) <= 15 then
+                            gameState = "MAP"; currentRoom = nil; playerX = 530 - 12; playerY = 391
+                        elseif math.abs(playerX - 674) <= 15 and math.abs(playerY - 322) <= playerSpeed then
+                            gameState = "MAP"; currentRoom = nil; playerX = 563; playerY = 304 - 12
+                        else
+                            local leftRoom = checkRoomTransitions(playerX, playerY)
+                            if not leftRoom then currentRoom = nil; gameState = "MAP" end
                         end
-                    end
-                end
-            end
-        end
-
-        cameraX = playerX - (SCREEN_WIDTH / 2) + (playerSize / 2)
-        if cameraX < 0 then cameraX = 0
-        elseif cameraX > (MAP_WIDTH - SCREEN_WIDTH) then cameraX = MAP_WIDTH - SCREEN_WIDTH end
-        cameraY = playerY - (SCREEN_HEIGHT / 2) + (playerSize / 2)
-        if cameraY < 0 then cameraY = 0
-        elseif cameraY > (MAP_HEIGHT - SCREEN_HEIGHT) then cameraY = MAP_HEIGHT - SCREEN_HEIGHT end
-    end
+                    elseif currentRoom.name == "Kitchen" then
+                        if math.abs(playerX - 744) <= 15 and math.abs(playerY - 584) <= (playerSpeed + 2) then
+                            gameState = "MAP"; currentRoom = nil; playerX = 617; playerY = 565 - 12
+                        end
+                    elseif currentRoom.name == "Ballroom" then
+                        if math.abs(playerX - 409) <= playerSpeed and math.abs(playerY - 605) <= 15 then
+                            gameState = "MAP"; currentRoom = nil; playerX = 290 - 12; playerY = 598
+elseif math.abs(playerX - 436) <= 15 and math.abs(playerY - 557) <= playerSpeed then
+gameState = "MAP"; currentRoom = nil; playerX = 326; playerY = 535 - 12
+elseif math.abs(playerX - 525) <= 15 and math.abs(playerY - 557) <= playerSpeed then
+gameState = "MAP"; currentRoom = nil; playerX = 464; playerY = 535 - 12
+elseif math.abs(playerX - 562) <= playerSpeed and math.abs(playerY - 605) <= 15 then
+gameState = "MAP"; currentRoom = nil; playerX = 506 + 12; playerY = 598
 end
-
+elseif currentRoom.name == "Conservatory" then
+if math.abs(playerX - 319) <= playerSpeed and math.abs(playerY - 635) <= 15 then
+gameState = "MAP"; currentRoom = nil; playerX = 210 + 12; playerY = 598
+end
+elseif currentRoom.name == "Game Room" then
+if math.abs(playerX - 331) <= playerSpeed and math.abs(playerY - 512) <= 15 then
+gameState = "MAP"; currentRoom = nil; playerX = 207 + 12; playerY = 478
+elseif math.abs(playerX - 205) <= 15 and math.abs(playerY - 419) <= playerSpeed then
+gameState = "MAP"; currentRoom = nil; playerX = 90; playerY = 385 - 12
+end
+elseif currentRoom.name == "Library" then
+if math.abs(playerX - 243) <= 15 and math.abs(playerY - 384) <= (playerSpeed + 2) then
+gameState = "MAP"; currentRoom = nil; playerX = 147; playerY = 337 + 12
+elseif math.abs(playerX - 354) <= (playerSpeed + 2) and math.abs(playerY - 309) <= 15 then
+gameState = "MAP"; currentRoom = nil; playerX = 243 + 12; playerY = 274
+end
+elseif currentRoom.name == "Study" then
+if math.abs(playerX - 361) <= (playerSpeed + 2) and math.abs(playerY - 204) <= 15 then
+gameState = "MAP"; currentRoom = nil; playerX = 224 + 12; playerY = 136
+end
+elseif currentRoom.name == "Lounge" then
+if math.abs(playerX - 660) <= 15 and math.abs(playerY - 215) <= (playerSpeed + 2) then
+gameState = "MAP"; currentRoom = nil; playerX = 566; playerY = 196 + 12
+end
+elseif currentRoom.name == "Hall" then
+if math.abs(playerX - 525) <= 15 and math.abs(playerY - 222) <= (playerSpeed + 2) then
+gameState = "MAP"; currentRoom = nil; playerX = 398; playerY = 220 + 12
+elseif math.abs(playerX - 462) <= playerSpeed and math.abs(playerY - 174) <= 15 then
+gameState = "MAP"; currentRoom = nil; playerX = 323 - 12; playerY = 157
+end
+end
+end -- Close Exit Logic block
+end -- Close Moved block
+end -- Close Movement check block
+cameraX = playerX - (SCREEN_WIDTH / 2) + (playerSize / 2)
+if cameraX < 0 then cameraX = 0
+elseif cameraX > (MAP_WIDTH - SCREEN_WIDTH) then cameraX = MAP_WIDTH - SCREEN_WIDTH end
+cameraY = playerY - (SCREEN_HEIGHT / 2) + (playerSize / 2)
+if cameraY < 0 then cameraY = 0
+elseif cameraY > (MAP_HEIGHT - SCREEN_HEIGHT) then cameraY = MAP_HEIGHT - SCREEN_HEIGHT end
+end -- Close Main game block
+end -- Close handleDpadInput function
 local function handleCrankInput()
-    if playdate.isCrankDocked() then
-        if gameState == "MAP_FULL" then gameState = "MAP" end
-        return
-    end
-    if gameState ~= "NOTEPAD" then
-        local crankChange = playdate.getCrankChange()
-        if crankChange > 2 then gameState = "MAP_FULL"
-        elseif crankChange < -2 then gameState = "MAP" end
-    end
+if playdate.isCrankDocked() then
+if gameState == "MAP_FULL" then gameState = "MAP" end
+return
 end
-
+if gameState ~= "NOTEPAD" then
+local crankChange = playdate.getCrankChange()
+if crankChange > 2 then gameState = "MAP_FULL"
+elseif crankChange < -2 then gameState = "MAP" end
+end
+end
 -- ==========================================================
--- MAIN DRAW LOOP
+-- MAIN ENGINE UPDATE LOOP (KEEP AT THE VERY BOTTOM OF FILE)
 -- ==========================================================
 function playdate.update()
-    gfx.clear()
-    handleDpadInput()
-    handleCrankInput()
-    playdate.display.setScale(1)
-    
-    if gameState == "MAP" then
-        if roomBackgrounds.mansion then
-            roomBackgrounds.mansion:draw(-cameraX, -cameraY)
-        end
-        gfx.setColor(gfx.kColorWhite)
-        gfx.fillEllipseInRect(playerX - cameraX, playerY - cameraY, playerSize, playerSize)
-        gfx.setColor(gfx.kColorBlack)
-        gfx.drawEllipseInRect(playerX - cameraX, playerY - cameraY, playerSize, playerSize)
-        gfx.setColor(gfx.kColorBlack)
-        gfx.fillRect(0, 0, SCREEN_WIDTH, 20)
-        gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
-        gfx.drawText(string.format("STEPS: %i | ACCUSATIONS: %i", playerTilesLeft, totalAccusationsLeft), 10, 2)
-        gfx.setColor(gfx.kColorBlack)
-        gfx.fillRect(0, SCREEN_HEIGHT - 20, SCREEN_WIDTH, 20)
-        
-        local roomString = "Path"
-        if currentRoom then
-            roomString = string.format("Room: %s", currentRoom.name)
-        elseif playerTilesLeft == 0 then
-            roomString = "OUT OF STEPS!"
-        end
-        
-        local bottomHudText = string.format("%s | X: %i, Y: %i", roomString, playerX, playerY)
-        gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
-        gfx.drawText(bottomHudText, 10, SCREEN_HEIGHT - 18)
-        gfx.setImageDrawMode(gfx.kDrawModeCopy)
-        
-    elseif gameState == "MAP_FULL" then
-        if roomBackgrounds.board then
-            local boardWidth, boardHeight = roomBackgrounds.board:getSize()
-            local centeredX = (SCREEN_WIDTH - boardWidth) / 2
-            local centeredY = (SCREEN_HEIGHT - boardHeight) / 2
-            roomBackgrounds.board:draw(centeredX, centeredY)
-        end
-        
-    elseif gameState == "ROOM_VIEW" then
-        if currentRoom and currentRoom.img then
-            currentRoom.img:draw(0, 20)
-        else
-            gfx.drawText("Error: Room asset missing!", 20, 20)
-        end
-        
-        local localPlayerX = 200
-        local localPlayerY = 120
-        if currentRoom then
-            localPlayerX = playerX - currentRoom.x
-            localPlayerY = (playerY - currentRoom.y) + 20
-        end
-        
-        gfx.setColor(gfx.kColorWhite)
-        gfx.fillEllipseInRect(localPlayerX, localPlayerY, playerSize, playerSize)
-        gfx.setColor(gfx.kColorBlack)
-        gfx.drawEllipseInRect(localPlayerX, localPlayerY, playerSize, playerSize)
-        gfx.setColor(gfx.kColorBlack)
-        gfx.fillRect(0, 0, SCREEN_WIDTH, 20)
-        gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
-        gfx.drawText(string.format("STEPS: %i | ACCUSATIONS: %i", playerTilesLeft, totalAccusationsLeft), 10, 2)
-        gfx.setColor(gfx.kColorBlack)
-        gfx.fillRect(0, SCREEN_HEIGHT - 20, SCREEN_WIDTH, 20)
-        
-        local roomName = currentRoom and currentRoom.name or "Unknown"
-        local debugText = string.format("%s | World: %i,%i | Room: %i,%i", roomName, playerX, playerY, localPlayerX, localPlayerY - 20)
-        gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
-        gfx.drawText(debugText, 6, SCREEN_HEIGHT - 18)
-        gfx.setImageDrawMode(gfx.kDrawModeCopy)
-        
-    elseif gameState == "NOTEPAD" then
-        gfx.drawText("DETECTIVE NOTEPAD", 125, 8)
+gfx.clear()
+-- Process calculations
+handleDpadInput()
+handleCrankInput()
+-- Global scale initializer
+playdate.display.setScale(1)
+-- State Rendering Routers
+if gameState == "MAP" then
+if roomBackgrounds.mansion then
+roomBackgrounds.mansion:draw(-cameraX, -cameraY)
+end
+gfx.setColor(gfx.kColorWhite)
+gfx.fillEllipseInRect(playerX - cameraX, playerY - cameraY, playerSize, playerSize)
+gfx.setColor(gfx.kColorBlack)
+gfx.drawEllipseInRect(playerX - cameraX, playerY - cameraY, playerSize, playerSize)
+-- Top HUD bar
+gfx.setColor(gfx.kColorBlack)
+gfx.fillRect(0, 0, SCREEN_WIDTH, 20)
+gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
+gfx.drawText(string.format("STEPS: %i | ACCUSATIONS: %i", playerTilesLeft, totalAccusationsLeft), 10, 2)
+-- Bottom HUD bar
+gfx.setColor(gfx.kColorBlack)
+gfx.fillRect(0, SCREEN_HEIGHT - 20, SCREEN_WIDTH, 20)
+local roomString = "Path"
+if currentRoom then
+roomString = string.format("Room: %s", currentRoom.name)
+elseif playerTilesLeft == 0 then
+roomString = "OUT OF STEPS!"
+end
+local bottomHudText = string.format("%s | X: %i, Y: %i", roomString, playerX, playerY)
+gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
+gfx.drawText(bottomHudText, 10, SCREEN_HEIGHT - 18)
+gfx.setImageDrawMode(gfx.kDrawModeCopy)
+elseif gameState == "MAP_FULL" then
+if roomBackgrounds.board then
+local boardWidth, boardHeight = roomBackgrounds.board:getSize()
+local centeredX = (SCREEN_WIDTH - boardWidth) / 2
+local centeredY = (SCREEN_HEIGHT - boardHeight) / 2
+roomBackgrounds.board:draw(centeredX, centeredY)
+end
+elseif gameState == "ROOM_VIEW" then
+if currentRoom and currentRoom.img then
+currentRoom.img:draw(0, 20)
+else
+gfx.drawText("Error: Room asset missing!", 20, 20)
+end
+local localPlayerX = 200
+local localPlayerY = 120
+if currentRoom then
+localPlayerX = playerX - currentRoom.x
+localPlayerY = (playerY - currentRoom.y) + 20
+end
+gfx.setColor(gfx.kColorWhite)
+gfx.fillEllipseInRect(localPlayerX, localPlayerY, playerSize, playerSize)
+gfx.setColor(gfx.kColorBlack)
+gfx.drawEllipseInRect(localPlayerX, localPlayerY, playerSize, playerSize)
+-- Top Room HUD
+gfx.setColor(gfx.kColorBlack)
+gfx.fillRect(0, 0, SCREEN_WIDTH, 20)
+gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
+gfx.drawText(string.format("STEPS: %i | ACCUSATIONS: %i", playerTilesLeft, totalAccusationsLeft), 10, 2)
+-- Bottom Room HUD
+gfx.setColor(gfx.kColorBlack)
+gfx.fillRect(0, SCREEN_HEIGHT - 20, SCREEN_WIDTH, 20)
+local roomName = currentRoom and currentRoom.name or "Unknown"
+local debugText = string.format("%s | World: %i,%i | Room: %i,%i", roomName, playerX, playerY, localPlayerX, localPlayerY - 20)
+gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
+gfx.drawText(debugText, 6, SCREEN_HEIGHT - 18)
+gfx.setImageDrawMode(gfx.kDrawModeCopy)
+elseif gameState == "NOTEPAD" then
+gfx.setImageDrawMode(gfx.kDrawModeCopy)
+gfx.setColor(gfx.kColorBlack)
+gfx.drawText("DETECTIVE NOTEPAD", 125, 8)
 gfx.drawLine(20, 24, 380, 24)
 local maxRows = 8
 for i = 1, maxRows do
