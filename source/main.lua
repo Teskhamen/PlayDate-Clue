@@ -254,6 +254,16 @@ local scrollOffset = 0
 local stateBeforeNotepad = "MAP"
 local activeSpeaker = ""
 local dialogueText = ""
+-- ==========================================================
+-- ACCUSATION WIZARD STATE SELECTION TRACKERS
+-- ==========================================================
+local accuseWeaponIndex = 1
+local accuseRoomIndex = 1
+local finalAccuseWeapon = ""
+local finalAccuseRoom = ""
+
+local masterWeaponList = { "Candlestick", "Dagger", "Lead Pipe", "Revolver", "Rope", "Wrench" }
+local masterRoomList = { "Kitchen", "Ballroom", "Conservatory", "Dining Room", "Billiard Room", "Library", "Lounge", "Hall", "Study" }
 
 -- Helper function to check if a pixel coordinate is walkable
 local function isWalkable(x, y)
@@ -305,30 +315,6 @@ end
 end
 return nil
 end
-function playdate.BButtonDown()
-if gameState == "DIALOGUE" then
-return
-elseif gameState == "NOTEPAD" then
-gameState = stateBeforeNotepad
-else
-if gameState == "MAP" or gameState == "ROOM_VIEW" then
-stateBeforeNotepad = gameState
-gameState = "NOTEPAD"
-end
-end
-end
-function playdate.AButtonDown()
-if gameState == "NOTEPAD" then
-local currentItem = checklist[selectedIndex]
-if currentItem and not currentItem.isHeader then
-currentItem.checked = not currentItem.checked
-end
-elseif gameState == "DIALOGUE" then
-gameState = "ROOM_VIEW"
-activeSpeaker = ""
-dialogueText = ""
-end
-end
 local function handleDpadInput()
     if gameState == "NOTEPAD" then
         if playdate.buttonJustPressed(playdate.kButtonUp) then
@@ -349,6 +335,24 @@ local function handleDpadInput()
             scrollOffset = selectedIndex - 7
         elseif selectedIndex - scrollOffset < 2 then
             scrollOffset = math.max(0, selectedIndex - 2)
+        end
+        
+    elseif gameState == "ACCUSE_WEAPON" then
+        if playdate.buttonJustPressed(playdate.kButtonUp) then
+            accuseWeaponIndex = accuseWeaponIndex - 1
+            if accuseWeaponIndex < 1 then accuseWeaponIndex = #masterWeaponList end
+        elseif playdate.buttonJustPressed(playdate.kButtonDown) then
+            accuseWeaponIndex = accuseWeaponIndex + 1
+            if accuseWeaponIndex > #masterWeaponList then accuseWeaponIndex = 1 end
+        end
+
+    elseif gameState == "ACCUSE_ROOM" then
+        if playdate.buttonJustPressed(playdate.kButtonUp) then
+            accuseRoomIndex = accuseRoomIndex - 1
+            if accuseRoomIndex < 1 then accuseRoomIndex = #masterRoomList end
+        elseif playdate.buttonJustPressed(playdate.kButtonDown) then
+            accuseRoomIndex = accuseRoomIndex + 1
+            if accuseRoomIndex > #masterRoomList then accuseRoomIndex = 1 end
         end
         
     elseif gameState == "MAP" or gameState == "ROOM_VIEW" then
@@ -436,14 +440,22 @@ local function handleDpadInput()
                                 gameState = "MAP"; currentRoom = nil
                             end
                         elseif currentRoom.name == "Ballroom" then
+                            -- 1. Left Door (Map 290, 598)
                             if math.abs(playerX - 290) <= 15 and math.abs(playerY - 598) <= 15 then
-                                playerX = 409 + 12; playerY = 605
+                                playerX = 409 + 12; playerY = 605 -- Spawn right (inside)
+                                
+                            -- 2. Top Left Door (Map 326, 535)
                             elseif math.abs(playerX - 326) <= 15 and math.abs(playerY - 535) <= 20 then
-                                playerX = 436; playerY = 557 + 12
+                                playerX = 436; playerY = 557 + 12 -- Spawn down (inside)
+                                
+                            -- 3. FIX: Top Right Door (Restored Map 464, 535)
                             elseif math.abs(playerX - 464) <= 15 and math.abs(playerY - 535) <= 20 then
-                                playerX = 525; playerY = 557 + 12
+                                playerX = 525; playerY = 557 + 12 -- Spawn down (inside)
+                                
+                            -- 4. FIX: Right Door (Restored Map 506, 598)
                             elseif math.abs(playerX - 506) <= 15 and math.abs(playerY - 598) <= 15 then
-                                playerX = 562 - 12; playerY = 605
+                                playerX = 562 - 12; playerY = 605 -- Spawn left (inside)
+                                
                             else
                                 gameState = "MAP"; currentRoom = nil
                             end
@@ -501,16 +513,16 @@ local function handleDpadInput()
                         end
                     elseif currentRoom.name == "Kitchen" then
                         if math.abs(playerX - 748) <= 15 and math.abs(playerY - 590) <= (playerSpeed + 2) then
-                            gameState = "MAP"; currentRoom = nil; playerX = 617; playerY = 555 - 12
-                        end
-                    elseif currentRoom.name == "Ballroom" then
-                        if math.abs(playerX - 409) <= playerSpeed and math.abs(playerY - 605) <= 15 then
-                            gameState = "MAP"; currentRoom = nil; playerX = 290 - 12; playerY = 598
-                        elseif math.abs(playerX - 436) <= 15 and math.abs(playerY - 557) <= playerSpeed then
-                            gameState = "MAP"; currentRoom = nil; playerX = 326; playerY = 535 - 12
-                        elseif math.abs(playerX - 525) <= 15 and math.abs(playerY - 557) <= playerSpeed then
-                            gameState = "MAP"; currentRoom = nil; playerX = 464; playerY = 535 - 12
-                        elseif math.abs(playerX - 562) <= playerSpeed and math.abs(playerY - 605) <= 15 then
+gameState = "MAP"; currentRoom = nil; playerX = 617; playerY = 555 - 12
+end
+elseif currentRoom.name == "Ballroom" then
+if math.abs(playerX - 409) <= playerSpeed and math.abs(playerY - 605) <= 15 then
+gameState = "MAP"; currentRoom = nil; playerX = 290 - 12; playerY = 598
+elseif math.abs(playerX - 436) <= 15 and math.abs(playerY - 557) <= playerSpeed then
+gameState = "MAP"; currentRoom = nil; playerX = 326; playerY = 535 - 12
+elseif math.abs(playerX - 525) <= 15 and math.abs(playerY - 557) <= playerSpeed then
+gameState = "MAP"; currentRoom = nil; playerX = 464; playerY = 535 - 12
+elseif math.abs(playerX - 562) <= playerSpeed and math.abs(playerY - 605) <= 15 then
 gameState = "MAP"; currentRoom = nil; playerX = 506 + 12; playerY = 598
 end
 elseif currentRoom.name == "Conservatory" then
@@ -586,11 +598,11 @@ end
 break
 end
 end
-end -- End Suspect loop
-end -- End Safety Guard Check
-end -- End State Check
-end -- End Moved block
-end -- End Movement check block
+end
+end
+end
+end
+end
 cameraX = playerX - (SCREEN_WIDTH / 2) + (playerSize / 2)
 if cameraX < 0 then cameraX = 0
 elseif cameraX > (MAP_WIDTH - SCREEN_WIDTH) then cameraX = MAP_WIDTH - SCREEN_WIDTH end
@@ -611,28 +623,96 @@ elseif crankChange < -2 then gameState = "MAP" end
 end
 end
 function playdate.BButtonDown()
-if gameState == "DIALOGUE" then
-return
-elseif gameState == "NOTEPAD" then
-gameState = stateBeforeNotepad
-else
-if gameState == "MAP" or gameState == "ROOM_VIEW" then
-stateBeforeNotepad = gameState
-gameState = "NOTEPAD"
+    if gameState == "DIALOGUE" then
+        -- SWAPPED: Pressing B now cancels/exits the conversation instead of accusing!
+        -- This triggers the suspect re-routing logic immediately
+        local shiftingSuspect = nil
+        for i = 1, #suspects do
+            if suspects[i].name == activeSpeaker then shiftingSuspect = suspects[i]; break end
+        end
+        if shiftingSuspect then
+            local emptyRooms = {}
+            for r = 1, #rooms do
+                local roomName = rooms[r].name
+                local isOccupied = false
+                for s = 1, #suspects do
+                    if suspects[s].assignedRoomName == roomName then isOccupied = true; break end
+                end
+                if not isOccupied then table.insert(emptyRooms, rooms[r]) end
+            end
+            if #emptyRooms > 0 then
+                local chosenRoom = emptyRooms[math.random(1, #emptyRooms)]
+                shiftingSuspect.assignedRoomName = chosenRoom.name
+                local offset = innerRoomSafeSpots[chosenRoom.name] or { x = 200, y = 100 }
+                shiftingSuspect.worldX = chosenRoom.x + offset.x
+                shiftingSuspect.worldY = chosenRoom.y + offset.y
+            end
+        end
+
+        gameState = "ROOM_VIEW"
+        activeSpeaker = ""
+        dialogueText = ""
+
+    elseif gameState == "ACCUSE_CONFIRM" then
+        -- Cancel accusation screen, go back to dialogue text
+        gameState = "DIALOGUE"
+    elseif gameState == "ACCUSE_WEAPON" then
+        gameState = "ACCUSE_CONFIRM"
+    elseif gameState == "ACCUSE_ROOM" then
+        gameState = "ACCUSE_WEAPON"
+    elseif gameState == "ACCUSE_SUMMARY" then
+        gameState = "ACCUSE_ROOM"
+    elseif gameState == "NOTEPAD" then
+        gameState = stateBeforeNotepad
+    else
+        if gameState == "MAP" or gameState == "ROOM_VIEW" then
+            stateBeforeNotepad = gameState
+            gameState = "NOTEPAD"
+        end
+    end
 end
-end
-end
+
 function playdate.AButtonDown()
-if gameState == "NOTEPAD" then
-local currentItem = checklist[selectedIndex]
-if currentItem and not currentItem.isHeader then
-currentItem.checked = not currentItem.checked
-end
-elseif gameState == "DIALOGUE" then
-gameState = "ROOM_VIEW"
-activeSpeaker = ""
-dialogueText = ""
-end
+    if gameState == "NOTEPAD" then
+        local currentItem = checklist[selectedIndex]
+        if currentItem and not currentItem.isHeader then
+            currentItem.checked = not currentItem.checked
+        end
+        
+    elseif gameState == "DIALOGUE" then
+        -- SWAPPED: Pressing A now triggers the Accusation Confirmation screen!
+        gameState = "ACCUSE_CONFIRM"
+        
+    elseif gameState == "ACCUSE_CONFIRM" then
+        accuseWeaponIndex = 1
+        gameState = "ACCUSE_WEAPON"
+        
+    elseif gameState == "ACCUSE_WEAPON" then
+        finalAccuseWeapon = masterWeaponList[accuseWeaponIndex]
+        accuseRoomIndex = 1
+        gameState = "ACCUSE_ROOM"
+        
+    elseif gameState == "ACCUSE_ROOM" then
+        finalAccuseRoom = masterRoomList[accuseRoomIndex]
+        gameState = "ACCUSE_SUMMARY"
+        
+    elseif gameState == "ACCUSE_SUMMARY" then
+        if activeSpeaker == caseFile.killer and finalAccuseWeapon == caseFile.weapon and finalAccuseRoom == caseFile.room then
+            dialogueText = "CORRECT! You solved the case! You found the true killer, weapon, and crime scene."
+            gameState = "DIALOGUE" 
+            totalAccusationsLeft = 999 
+        else
+            totalAccusationsLeft = totalAccusationsLeft - 1
+            if totalAccusationsLeft <= 0 then
+                dialogueText = string.format("WRONG! Game Over. The mystery was %s with the %s in the %s.", caseFile.killer:upper(), caseFile.weapon:upper(), caseFile.room:upper())
+                gameState = "DIALOGUE"
+                playerTilesLeft = 0 
+            else
+                dialogueText = string.format("INCORRECT ACCUSATION! That guess was wrong. You have %i attempts remaining.", totalAccusationsLeft)
+                gameState = "DIALOGUE"
+            end
+        end
+    end
 end
 -- ==========================================================
 -- MAIN ENGINE UPDATE LOOP (KEEP AT THE VERY BOTTOM OF FILE)
@@ -780,8 +860,12 @@ if suspect.img then suspect.img:draw(localSuspectX, localSuspectY) end
 end
 end
 end
-local localPlayerX = playerX - currentRoom.x
-local localPlayerY = (playerY - currentRoom.y) + 20
+local localPlayerX = 200
+local localPlayerY = 120
+if currentRoom then
+localPlayerX = playerX - currentRoom.x
+localPlayerY = (playerY - currentRoom.y) + 20
+end
 if playerSpriteImage then playerSpriteImage:draw(localPlayerX, localPlayerY) end
 gfx.setImageDrawMode(gfx.kDrawModeCopy)
 gfx.setColor(gfx.kColorWhite)
@@ -790,9 +874,82 @@ gfx.setColor(gfx.kColorBlack)
 gfx.drawRect(15, SCREEN_HEIGHT - 75, SCREEN_WIDTH - 30, 60)
 gfx.drawRect(17, SCREEN_HEIGHT - 73, SCREEN_WIDTH - 34, 56)
 gfx.drawText(activeSpeaker:upper(), 25, SCREEN_HEIGHT - 70)
-gfx.drawTextInRect(dialogueText, 25, SCREEN_HEIGHT - 52, SCREEN_WIDTH - 50, 35, 0, kTextAlignLeft)
+gfx.drawTextInRect(dialogueText, 25, SCREEN_HEIGHT - 52, SCREEN_WIDTH - 50, 35, 0, gfx.kTextAlignLeft)
 if math.floor(playdate.getElapsedTime() * 3) % 2 == 0 then
-gfx.drawText("(A) NEXT", SCREEN_WIDTH - 85, SCREEN_HEIGHT - 30)
+gfx.drawText("(B) BACK", SCREEN_WIDTH - 375, SCREEN_HEIGHT - 35)
+gfx.drawText("(A) ACCUSE", SCREEN_WIDTH - 110, SCREEN_HEIGHT - 35)
+
 end
+elseif gameState == "ACCUSE_CONFIRM" then
+if currentRoom and currentRoom.img then currentRoom.img:draw(0, 20) end
+gfx.setColor(gfx.kColorBlack)
+gfx.fillRect(20, 40, SCREEN_WIDTH - 40, SCREEN_HEIGHT - 80)
+gfx.setColor(gfx.kColorWhite)
+gfx.drawRect(20, 40, SCREEN_WIDTH - 40, SCREEN_HEIGHT - 80)
+gfx.drawRect(22, 42, SCREEN_WIDTH - 44, SCREEN_HEIGHT - 84)
+gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
+gfx.drawText("CRITICAL ACCUSATION PROMPT", 100, 55)
+gfx.drawLine(40, 75, 360, 75)
+local linesText = string.format("Are you absolutely sure you want to formally accuse %s of committing the crime?", activeSpeaker:upper())
+gfx.drawTextInRect(linesText, 40, 95, SCREEN_WIDTH - 80, 50, 0, gfx.kTextAlignCenter)
+gfx.drawText("(A) CONFIRM SUSPECT", SCREEN_WIDTH - 375, SCREEN_HEIGHT - 70)
+gfx.drawText("(B) CANCEL", SCREEN_WIDTH - 195, SCREEN_HEIGHT - 70)
+gfx.setImageDrawMode(gfx.kDrawModeCopy)
+elseif gameState == "ACCUSE_WEAPON" then
+if currentRoom and currentRoom.img then currentRoom.img:draw(0, 20) end
+gfx.setColor(gfx.kColorBlack)
+gfx.fillRect(30, 30, SCREEN_WIDTH - 60, SCREEN_HEIGHT - 60)
+gfx.setColor(gfx.kColorWhite)
+gfx.drawRect(30, 30, SCREEN_WIDTH - 60, SCREEN_HEIGHT - 60)
+gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
+gfx.drawText("SELECT MURDER WEAPON", 110, 40)
+gfx.drawLine(45, 58, 355, 58)
+for i = 1, #masterWeaponList do
+local currentY = 65 + ((i - 1) * 18)
+if i == accuseWeaponIndex then
+gfx.drawText("-> " .. masterWeaponList[i]:upper(), 130, currentY)
+else
+gfx.drawText(masterWeaponList[i], 150, currentY)
+end
+end
+gfx.drawText("(A) CONFIRM WEAPON", 45, SCREEN_HEIGHT - 52)
+gfx.drawText("(B) GO BACK", SCREEN_WIDTH - 130, SCREEN_HEIGHT - 52)
+gfx.setImageDrawMode(gfx.kDrawModeCopy)
+elseif gameState == "ACCUSE_ROOM" then
+if currentRoom and currentRoom.img then currentRoom.img:draw(0, 20) end
+gfx.setColor(gfx.kColorBlack)
+gfx.fillRect(30, 22, SCREEN_WIDTH - 60, SCREEN_HEIGHT - 44)
+gfx.setColor(gfx.kColorWhite)
+gfx.drawRect(30, 22, SCREEN_WIDTH - 60, SCREEN_HEIGHT - 44)
+gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
+gfx.drawText("SELECT CRIME SCENE", 110, 28)
+gfx.drawLine(45, 44, 355, 44)
+for i = 1, #masterRoomList do
+local currentY = 48 + ((i - 1) * 15)
+if i == accuseRoomIndex then
+gfx.drawText("-> " .. masterRoomList[i]:upper(), 110, currentY)
+else
+gfx.drawText(masterRoomList[i], 130, currentY)
+end
+end
+gfx.drawText("(A) CONFIRM ROOM", 45, SCREEN_HEIGHT - 42)
+gfx.drawText("(B) GO BACK", SCREEN_WIDTH - 130, SCREEN_HEIGHT - 42)
+gfx.setImageDrawMode(gfx.kDrawModeCopy)
+elseif gameState == "ACCUSE_SUMMARY" then
+if currentRoom and currentRoom.img then currentRoom.img:draw(0, 20) end
+gfx.setColor(gfx.kColorBlack)
+gfx.fillRect(20, 35, SCREEN_WIDTH - 40, SCREEN_HEIGHT - 70)
+gfx.setColor(gfx.kColorWhite)
+gfx.drawRect(20, 35, SCREEN_WIDTH - 40, SCREEN_HEIGHT - 70)
+gfx.drawRect(22, 37, SCREEN_WIDTH - 44, SCREEN_HEIGHT - 74)
+gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
+gfx.drawText("FINAL ACCUSATION", 105, 45)
+gfx.drawLine(40, 65, 360, 65)
+gfx.drawText("SUSPECT : " .. activeSpeaker:upper(), 60, 85)
+gfx.drawText("WEAPON : " .. finalAccuseWeapon:upper(), 60, 110)
+gfx.drawText("ROOM : " .. finalAccuseRoom:upper(), 60, 135)
+gfx.drawText("(A) ACCUSE!", 45, SCREEN_HEIGHT - 60)
+gfx.drawText("(B) GO BACK", SCREEN_WIDTH - 135, SCREEN_HEIGHT - 60)
+gfx.setImageDrawMode(gfx.kDrawModeCopy)
 end
 end
