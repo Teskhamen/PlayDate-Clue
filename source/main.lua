@@ -86,6 +86,71 @@ for i, room in ipairs(rooms) do
     end
 end
 
+-- ==========================================================
+-- SUSPECT ROOM PLACEMENT SYSTEM
+-- ==========================================================
+local suspects = {
+    { name = "Miss Scarlet",     img = gfx.image.new("images/scarlet_sprite") },
+    { name = "Colonel Mustard",  img = gfx.image.new("images/mustard_sprite") },
+    { name = "Mrs. White",       img = gfx.image.new("images/white_sprite") },
+    { name = "Mr. Green",        img = gfx.image.new("images/green_sprite") },
+    { name = "Mrs. Peacock",     img = gfx.image.new("images/peacock_sprite") },
+    { name = "Professor Plum",   img = gfx.image.new("images/plum_sprite") }
+}
+
+-- Safe, walkable inner room coordinates for suspects (offset relative to room.x, room.y)
+-- These keep suspects out of doorways and clear of wall clipping zones
+local innerRoomSafeSpots = {
+    ["Study"]        = { x = 60,  y = 40  },
+    ["Hall"]         = { x = 70,  y = 100 },
+    ["Lounge"]       = { x = 80,  y = 60  },
+    ["Library"]      = { x = 100, y = 50  },
+    ["Game Room"]    = { x = 60,  y = 60  },
+    ["Dining Room"]  = { x = 80,  y = 90  },
+    ["Conservatory"] = { x = 70,  y = 70  },
+    ["Ballroom"]     = { x = 100, y = 80  },
+    ["Kitchen"]      = { x = 60,  y = 70  }
+}
+
+-- Shuffle helper function to randomize our room allocation list
+local function shuffleTable(t)
+    for i = #t, 2, -1 do
+        local j = math.random(1, i)
+        t[i], t[j] = t[j], t[i]
+    end
+end
+
+-- Clear out any existing suspect positions
+for _, suspect in ipairs(suspects) do
+    suspect.assignedRoomName = nil
+    suspect.worldX = 0
+    suspect.worldY = 0
+end
+
+-- Create a list of available room names and shuffle them
+local poolOfRooms = {}
+for _, room in ipairs(rooms) do
+    table.insert(poolOfRooms, room.name)
+end
+shuffleTable(poolOfRooms)
+
+-- Assign each suspect to a unique random room from the shuffled pool
+for i, suspect in ipairs(suspects) do
+    local roomName = poolOfRooms[i]
+    suspect.assignedRoomName = roomName
+    
+    -- Find the global room data to calculate their exact world position
+    for _, room in ipairs(rooms) do
+        if room.name == roomName then
+            local offset = innerRoomSafeSpots[roomName] or { x = 50, y = 50 }
+            suspect.worldX = room.x + offset.x
+            suspect.worldY = room.y + offset.y
+            break
+        end
+    end
+end
+
+
 -- Simulated Player Position & Dimensions
 local playerX = 500 
 -- ==========================================================
@@ -333,20 +398,18 @@ local function handleDpadInput()
                         currentRoom = newRoom
                         gameState = "ROOM_VIEW"
                         
-                        if currentRoom.name == "Dining Room" then
-                            if math.abs(playerX - 530) <= 15 and math.abs(playerY - 391) <= 15 then
-                                playerX = 638 + 12; playerY = 403
-                            elseif math.abs(playerX - 563) <= 15 and math.abs(playerY - 304) <= 15 then
-                                playerX = 674; playerY = 322 + 12
-                            else
-                                playerX = 638 + 12; playerY = 403
-                            end
-                        elseif currentRoom.name == "Kitchen" then
-                            if math.abs(playerX - 617) <= 15 and math.abs(playerY - 565) <= 15 then
-                                playerX = 744; playerY = 584 + 12
-                            else
-                                playerX = 744; playerY = 584 + 12
-                            end
+        -- DINING ROOM ENTRY DETECTOR (SECURED)
+if currentRoom.name == "Dining Room" then
+            if math.abs(playerX - 530) <= 15 and math.abs(playerY - 391) <= 15 then
+                playerX = 638 + 12; playerY = 403
+            elseif math.abs(playerX - 563) <= 15 and math.abs(playerY - 304) <= 15 then
+                playerX = 674; playerY = 322 + 12
+            else                -- FIX: CRITICAL WALL PASS PROTECTION!
+                -- If they hit the room box somewhere other than a door, cancel the change.
+                -- Drop them out of ROOM_VIEW immediately back onto the MAP layer.
+                gameState = "MAP"
+                currentRoom = nil
+            end
                         elseif currentRoom.name == "Ballroom" then
                             if math.abs(playerX - 290) <= 15 and math.abs(playerY - 598) <= 15 then
                                 playerX = 409 + 12; playerY = 605
@@ -401,6 +464,15 @@ local function handleDpadInput()
                             else
                                 playerX = 490; playerY = 160
                             end
+elseif currentRoom.name == "Kitchen" then
+            -- Match your precise entry point at Map 617, 555
+            if math.abs(playerX - 617) <= 15 and math.abs(playerY - 555) <= 15 then
+                playerX = 748
+                playerY = 590 + 12 -- Spawn slightly down to step inside cleanly
+            else
+                -- Cancel entry if they hit a wall boundary instead of a door
+                gameState = "MAP"; currentRoom = nil
+            end
                         end
                     end
 
