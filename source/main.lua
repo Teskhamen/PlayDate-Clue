@@ -21,6 +21,7 @@ local maskImage = gfx.image.new("images/mask_map")
 if not maskImage then
     print("Warning: Could not load images/mask_map.png")
 end
+
 -- Load your custom 12x12 player sprite asset once globally
 local playerSpriteImage = gfx.image.new("images/player")
 if not playerSpriteImage then
@@ -55,31 +56,21 @@ local roomBackgrounds = {
 
 -- Definitive coordinate layout matching your 800x800 map dimensions
 local rooms = {
-    -- Top Row Rooms
     { name = "Study",        x = 50,  y = 37,  w = 189, h = 96,  img = roomBackgrounds.study,        mask = roomBackgrounds.studyMask },
     { name = "Hall",         x = 326, y = 52,  w = 144, h = 165, img = roomBackgrounds.hall,         mask = roomBackgrounds.hallMask },
     { name = "Lounge",       x = 554, y = 43,  w = 183, h = 150, img = roomBackgrounds.lounge,       mask = roomBackgrounds.loungeMask },
-    
-    -- Middle Row Rooms
     { name = "Library",      x = 50,  y = 217, w = 186, h = 108, img = roomBackgrounds.library,      mask = roomBackgrounds.libraryMask },
     { name = "Game Room",    x = 50,  y = 388, w = 156, h = 126, img = roomBackgrounds.game,         mask = roomBackgrounds.gameRoomMask },
     { name = "Dining Room",  x = 536, y = 310, w = 168, h = 177, img = roomBackgrounds.dining,       mask = roomBackgrounds.diningRoomMask },
-    
-    -- Bottom Row Rooms
     { name = "Conservatory", x = 50,  y = 598, w = 159, h = 126, img = roomBackgrounds.conservatory, mask = roomBackgrounds.conservatoryMask },
     { name = "Ballroom",     x = 296, y = 541, w = 201, h = 144, img = roomBackgrounds.ballroom,     mask = roomBackgrounds.ballRoomMask },
     { name = "Kitchen",      x = 590, y = 568, w = 150, h = 153, img = roomBackgrounds.kitchen,      mask = roomBackgrounds.kitchenMask }
 }
--- Inject separate ROOM_VIEW dimensions for the Dining Room safely via code injection
-rooms[6].maskW =400
+rooms[6].maskW = 400
 rooms[6].maskH = 200
 
--- ==========================================================
--- ROOM ASSET INITIALIZER
--- ==========================================================
 for i, room in ipairs(rooms) do
     if room.mask then
-        -- We don't need getMaskImage(). We will read the pixel colors directly!
         room.runtimeMask = room.mask
     else
         print("Warning: Missing layout mask asset for room: " .. room.name)
@@ -98,21 +89,110 @@ local suspects = {
     { name = "Professor Plum",   img = gfx.image.new("images/plum_sprite") }
 }
 
--- Safe, walkable inner room coordinates for suspects (offset relative to room.x, room.y)
--- These keep suspects out of doorways and clear of wall clipping zones
+-- ==========================================================
+-- MASTER NOTEBOOK TEMPLATES & DEALING ENGINE
+-- ==========================================================
+local masterKillers = { "Miss Scarlet", "Colonel Mustard", "Mrs. White", "Mr. Green", "Mrs. Peacock", "Professor Plum" }
+local masterWeapons = { "Candlestick", "Dagger", "Lead Pipe", "Revolver", "Rope", "Wrench" }
+local masterRooms   = { "Kitchen", "Ballroom", "Conservatory", "Dining Room", "Billiard Room", "Library", "Lounge", "Hall", "Study" }
+
+local caseFile = { killer = "", weapon = "", room = "" }
+
+local function createBlankNotepad()
+    return {
+        { category = "--- KILLERS ---", isHeader = true },
+        { name = "Miss Scarlet", checked = false },
+        { name = "Colonel Mustard", checked = false },
+        { name = "Mrs. White", checked = false },
+        { name = "Mr. Green", checked = false },
+        { name = "Mrs. Peacock", checked = false },
+        { name = "Professor Plum", checked = false },
+        
+        { category = "--- WEAPONS ---", isHeader = true },
+        { name = "Candlestick", checked = false },
+        { name = "Dagger", checked = false },
+        { name = "Lead Pipe", checked = false },
+        { name = "Revolver", checked = false },
+        { name = "Rope", checked = false },
+        { name = "Wrench", checked = false },
+        
+        { category = "--- ROOMS ---", isHeader = true },
+        { name = "Kitchen", checked = false },
+        { name = "Ballroom", checked = false },
+        { name = "Conservatory", checked = false },
+        { name = "Dining Room", checked = false },
+        { name = "Billiard Room", checked = false },
+        { name = "Library", checked = false },
+        { name = "Lounge", checked = false },
+        { name = "Hall", checked = false },
+        { name = "Study", checked = false }
+    }
+end
+
+local checklist = createBlankNotepad()
+for i = 1, #suspects do
+    suspects[i].notepad = createBlankNotepad()
+end
+
+local function shuffleStrings(t)
+    for i = #t, 2, -1 do
+        local j = math.random(1, i)
+        t[i], t[j] = t[j], t[i]
+    end
+end
+
+local function crossOffCard(notebook, cardName)
+    for _, row in ipairs(notebook) do
+        if not row.isHeader and row.name == cardName then
+            row.checked = true
+            break
+        end
+    end
+end
+
+math.randomseed(playdate.getSecondsSinceEpoch())
+local winKillerIdx = math.random(1, #masterKillers)
+local winWeaponIdx = math.random(1, #masterWeapons)
+local winRoomIdx   = math.random(1, #masterRooms)
+
+caseFile.killer = table.remove(masterKillers, winKillerIdx)
+caseFile.weapon = table.remove(masterWeapons, winWeaponIdx)
+caseFile.room   = table.remove(masterRooms, winRoomIdx)
+
+local dealPool = {}
+for _, v in ipairs(masterKillers) do table.insert(dealPool, v) end
+for _, v in ipairs(masterWeapons) do table.insert(dealPool, v) end
+for _, v in ipairs(masterRooms)   do table.insert(dealPool, v) end
+shuffleStrings(dealPool)
+
+local totalParticipants = 1 + #suspects
+for turn = 1, #dealPool do
+    local card = dealPool[turn]
+    local targetSeat = (turn - 1) % totalParticipants
+    
+    if targetSeat == 0 then
+        crossOffCard(checklist, card)
+    else
+        local AI = suspects[targetSeat]
+        crossOffCard(AI.notepad, card)
+    end
+end
+
+print("=== CASE FILE HIDDEN ===")
+print("Solution: " .. caseFile.killer .. " with the " .. caseFile.weapon .. " in the " .. caseFile.room)
+
 local innerRoomSafeSpots = {
-    ["Study"]        = { x = 60,  y = 40  },
-    ["Hall"]         = { x = 70,  y = 100 },
-    ["Lounge"]       = { x = 80,  y = 60  },
-    ["Library"]      = { x = 100, y = 50  },
-    ["Game Room"]    = { x = 60,  y = 60  },
-    ["Dining Room"]  = { x = 80,  y = 90  },
-    ["Conservatory"] = { x = 70,  y = 70  },
-    ["Ballroom"]     = { x = 100, y = 80  },
-    ["Kitchen"]      = { x = 60,  y = 70  }
+    ["Study"]        = { x = 200, y = 90  },
+    ["Hall"]         = { x = 200, y = 110 },
+    ["Lounge"]       = { x = 220, y = 100 },
+    ["Library"]      = { x = 190, y = 135 },
+    ["Game Room"]    = { x = 180, y = 100 },
+    ["Dining Room"]  = { x = 210, y = 135 },
+    ["Conservatory"] = { x = 180, y = 100 },
+    ["Ballroom"]     = { x = 200, y = 110 },
+    ["Kitchen"]      = { x = 200, y = 100 }
 }
 
--- Shuffle helper function to randomize our room allocation list
 local function shuffleTable(t)
     for i = #t, 2, -1 do
         local j = math.random(1, i)
@@ -120,29 +200,25 @@ local function shuffleTable(t)
     end
 end
 
--- Clear out any existing suspect positions
 for _, suspect in ipairs(suspects) do
     suspect.assignedRoomName = nil
     suspect.worldX = 0
     suspect.worldY = 0
 end
 
--- Create a list of available room names and shuffle them
 local poolOfRooms = {}
 for _, room in ipairs(rooms) do
     table.insert(poolOfRooms, room.name)
 end
 shuffleTable(poolOfRooms)
 
--- Assign each suspect to a unique random room from the shuffled pool
 for i, suspect in ipairs(suspects) do
     local roomName = poolOfRooms[i]
     suspect.assignedRoomName = roomName
     
-    -- Find the global room data to calculate their exact world position
     for _, room in ipairs(rooms) do
         if room.name == roomName then
-            local offset = innerRoomSafeSpots[roomName] or { x = 50, y = 50 }
+            local offset = innerRoomSafeSpots[roomName] or { x = 200, y = 100 }
             suspect.worldX = room.x + offset.x
             suspect.worldY = room.y + offset.y
             break
@@ -150,159 +226,109 @@ for i, suspect in ipairs(suspects) do
     end
 end
 
-
--- Simulated Player Position & Dimensions
-local playerX = 500 
 -- ==========================================================
--- RANDOM SUSPECT SPAWN CONFIGURATION
+-- PLAYER INITIALIZATION & RANDOM BOARD SPAWNS
 -- ==========================================================
 local startingSpawns = {
-    { x = 734, y = 247 }, -- Right side top
-    { x = 734, y = 538 }, -- Right side bottom
-    { x = 470, y = 742 }, -- Bottom side right
-    { x = 323, y = 742 }, -- Bottom side left
-    { x = 56,  y = 568 }, -- Left side bottom
-    { x = 56,  y = 190 }, -- Left side top
-    { x = 266, y = 49  }, -- Top side left
-    { x = 527, y = 49  }  -- Top side right
+    { x = 734, y = 247 }, { x = 734, y = 538 },
+    { x = 470, y = 742 }, { x = 323, y = 742 },
+    { x = 56,  y = 568 }, { x = 56,  y = 190 },
+    { x = 266, y = 49  }, { x = 527, y = 49  }
 }
 
--- Seed the randomizer using the Playdate's internal clock system
-math.randomseed(playdate.getSecondsSinceEpoch())
-
--- Pick one of the 8 spots out of the hat
 local chosenSpawnIndex = math.random(1, #startingSpawns)
 local selectedSpawn = startingSpawns[chosenSpawnIndex]
 
--- Assign your original variables to the newly selected random location!
 local playerX = selectedSpawn.x
 local playerY = selectedSpawn.y
-
--- Simulated Player Dimensions & Speeds
 local playerSize = 12 
 local playerSpeed = 3          
 local pixelRemainder = 0       
 local currentRoom = nil
 
--- Full 2D Camera Tracking offsets
 local cameraX = 0
 local cameraY = 0
 
--- Helper function to check if a pixel coordinate is walkable
-local function isWalkable(x, y)
-    local points = {
-        {x = x, y = y},
-        {x = x + playerSize - 1, y = y},
-        {x = x, y = y + playerSize - 1},
-        {x = x + playerSize - 1, y = y + playerSize - 1},
-        {x = x + (playerSize / 2), y = y + (playerSize / 2)}
-    }
-
-    if gameState == "ROOM_VIEW" and currentRoom and currentRoom.runtimeMask then
-        -- Allow boundary reading up to the full image canvas (400px)
-        local maskW, maskH = currentRoom.runtimeMask:getSize()
-        
-        for _, pt in ipairs(points) do
-            local localX = math.floor(pt.x - currentRoom.x)
-            local localY = math.floor(pt.y - currentRoom.y)
-            
-            if localX < 0 or localX >= maskW or localY < 0 or localY >= maskH then
-                return false 
-            else
-                local color = currentRoom.runtimeMask:sample(localX, localY)
-                if color == gfx.kColorWhite or color == 1 then
-                    -- Exception: Ignore the line at 255-260 in the Dining Room
-                    if currentRoom.name == "Dining Room" and localX >= 255 and localX <= 260 then
-                        -- Allow walking through
-                    else
-                        return false 
-                    end
-                end
-            end
-        end
-    else
-        if maskImage then
-            local maskW, maskH = maskImage:getSize()
-            for _, pt in ipairs(points) do
-                local clampedX = math.max(0, math.min(maskW - 1, math.floor(pt.x)))
-                local clampedY = math.max(0, math.min(maskH - 1, math.floor(pt.y)))
-                
-                local color = maskImage:sample(clampedX, clampedY)
-                if color == gfx.image.kColorWhite or color == 1 then
-                    return false 
-                end
-            end
-        end
-    end
-    
-    return true 
-end
--- Determines if coordinates clash with room boundaries
-local function checkRoomTransitions(px, py)
-    for _, room in ipairs(rooms) do
-        if px >= room.x and px <= (room.x + room.w) and py >= room.y and py <= (room.y + room.h) then
-            return room
-        end
-    end
-    return nil
-end
-
--- Plain table setup with Headers and Items
-local checklist = {
-    { category = "--- KILLERS ---", isHeader = true },
-    { name = "Miss Scarlet", checked = false },
-    { name = "Colonel Mustard", checked = false },
-    { name = "Mrs. White", checked = false },
-    { name = "Mr. Green", checked = false },
-    { name = "Mrs. Peacock", checked = false },
-    { name = "Professor Plum", checked = false },
-    
-    { category = "--- WEAPONS ---", isHeader = true },
-    { name = "Candlestick", checked = false },
-    { name = "Dagger", checked = false },
-    { name = "Lead Pipe", checked = false },
-    { name = "Revolver", checked = false },
-    { name = "Rope", checked = false },
-    { name = "Wrench", checked = false },
-    
-    { category = "--- ROOMS ---", isHeader = true },
-    { name = "Kitchen", checked = false },
-    { name = "Ballroom", checked = false },
-    { name = "Conservatory", checked = false },
-    { name = "Dining Room", checked = false },
-    { name = "Billiard Room", checked = false },
-    { name = "Library", checked = false },
-    { name = "Lounge", checked = false },
-    { name = "Hall", checked = false },
-    { name = "Study", checked = false }
-}
 local selectedIndex = 2 
 local scrollOffset = 0
-
--- Track the previous state before entering the notepad
 local stateBeforeNotepad = "MAP"
+local activeSpeaker = ""
+local dialogueText = ""
 
+-- Helper function to check if a pixel coordinate is walkable
+local function isWalkable(x, y)
+local points = {
+{x = x, y = y},
+{x = x + playerSize - 1, y = y},
+{x = x, y = y + playerSize - 1},
+{x = x + playerSize - 1, y = y + playerSize - 1},
+{x = x + (playerSize / 2), y = y + (playerSize / 2)}
+}
+if gameState == "ROOM_VIEW" and currentRoom and currentRoom.runtimeMask then
+local maskW, maskH = currentRoom.runtimeMask:getSize()
+for _, pt in ipairs(points) do
+local localX = math.floor(pt.x - currentRoom.x)
+local localY = math.floor(pt.y - currentRoom.y)
+if localX < 0 or localX >= maskW or localY < 0 or localY >= maskH then
+return false
+else
+local color = currentRoom.runtimeMask:sample(localX, localY)
+if color == gfx.kColorWhite or color == 1 then
+if currentRoom.name == "Dining Room" and localX >= 255 and localX <= 260 then
+-- Exception check pathing allowance
+else
+return false
+end
+end
+end
+end
+else
+if maskImage then
+local maskW, maskH = maskImage:getSize()
+for _, pt in ipairs(points) do
+local clampedX = math.max(0, math.min(maskW - 1, math.floor(pt.x)))
+local clampedY = math.max(0, math.min(maskH - 1, math.floor(pt.y)))
+local color = maskImage:sample(clampedX, clampedY)
+if color == gfx.kColorWhite or color == 1 then
+return false
+end
+end
+end
+end
+return true
+end
+local function checkRoomTransitions(px, py)
+for _, room in ipairs(rooms) do
+if px >= room.x and px <= (room.x + room.w) and py >= room.y and py <= (room.y + room.h) then
+return room
+end
+end
+return nil
+end
 function playdate.BButtonDown()
-    if gameState == "NOTEPAD" then
-        -- Close the notepad and return to exactly where you were (MAP or ROOM_VIEW)
-        gameState = stateBeforeNotepad
-    else
-        -- Only allow opening the notepad if you are actively walking around
-        if gameState == "MAP" or gameState == "ROOM_VIEW" then
-            stateBeforeNotepad = gameState -- Remember if we were in the hallway or a room
-            gameState = "NOTEPAD"
-        end
-    end
+if gameState == "DIALOGUE" then
+return
+elseif gameState == "NOTEPAD" then
+gameState = stateBeforeNotepad
+else
+if gameState == "MAP" or gameState == "ROOM_VIEW" then
+stateBeforeNotepad = gameState
+gameState = "NOTEPAD"
 end
-
+end
+end
 function playdate.AButtonDown()
-    if gameState == "NOTEPAD" then
-        if not checklist[selectedIndex].isHeader then
-            checklist[selectedIndex].checked = not checklist[selectedIndex].checked
-        end
-    end
+if gameState == "NOTEPAD" then
+local currentItem = checklist[selectedIndex]
+if currentItem and not currentItem.isHeader then
+currentItem.checked = not currentItem.checked
 end
-
+elseif gameState == "DIALOGUE" then
+gameState = "ROOM_VIEW"
+activeSpeaker = ""
+dialogueText = ""
+end
+end
 local function handleDpadInput()
     if gameState == "NOTEPAD" then
         if playdate.buttonJustPressed(playdate.kButtonUp) then
@@ -389,27 +415,26 @@ local function handleDpadInput()
                     end
                 end
 
-                -- ==========================================================
-                -- 1. ENTRY LOGIC: MAP -> ROOM_VIEW
-                -- ==========================================================
                 if gameState == "MAP" then
                     local newRoom = checkRoomTransitions(playerX, playerY)
                     if newRoom then
                         currentRoom = newRoom
                         gameState = "ROOM_VIEW"
                         
-        -- DINING ROOM ENTRY DETECTOR (SECURED)
-if currentRoom.name == "Dining Room" then
-            if math.abs(playerX - 530) <= 15 and math.abs(playerY - 391) <= 15 then
-                playerX = 638 + 12; playerY = 403
-            elseif math.abs(playerX - 563) <= 15 and math.abs(playerY - 304) <= 15 then
-                playerX = 674; playerY = 322 + 12
-            else                -- FIX: CRITICAL WALL PASS PROTECTION!
-                -- If they hit the room box somewhere other than a door, cancel the change.
-                -- Drop them out of ROOM_VIEW immediately back onto the MAP layer.
-                gameState = "MAP"
-                currentRoom = nil
-            end
+                        if currentRoom.name == "Dining Room" then
+                            if math.abs(playerX - 530) <= 15 and math.abs(playerY - 391) <= 15 then
+                                playerX = 638 + 12; playerY = 403
+                            elseif math.abs(playerX - 563) <= 15 and math.abs(playerY - 304) <= 15 then
+                                playerX = 674; playerY = 322 + 12
+                            else
+                                gameState = "MAP"; currentRoom = nil
+                            end
+                        elseif currentRoom.name == "Kitchen" then
+                            if math.abs(playerX - 617) <= 15 and math.abs(playerY - 555) <= 15 then
+                                playerX = 748; playerY = 590 + 12
+                            else
+                                gameState = "MAP"; currentRoom = nil
+                            end
                         elseif currentRoom.name == "Ballroom" then
                             if math.abs(playerX - 290) <= 15 and math.abs(playerY - 598) <= 15 then
                                 playerX = 409 + 12; playerY = 605
@@ -420,13 +445,13 @@ if currentRoom.name == "Dining Room" then
                             elseif math.abs(playerX - 506) <= 15 and math.abs(playerY - 598) <= 15 then
                                 playerX = 562 - 12; playerY = 605
                             else
-                                playerX = 485; playerY = 580
+                                gameState = "MAP"; currentRoom = nil
                             end
                         elseif currentRoom.name == "Conservatory" then
                             if math.abs(playerX - 210) <= 15 and math.abs(playerY - 598) <= 15 then
                                 playerX = 319 - 12; playerY = 635
                             else
-                                playerX = 319 - 12; playerY = 635
+                                gameState = "MAP"; currentRoom = nil
                             end
                         elseif currentRoom.name == "Game Room" then
                             if math.abs(playerX - 207) <= 15 and math.abs(playerY - 478) <= 15 then
@@ -434,7 +459,7 @@ if currentRoom.name == "Dining Room" then
                             elseif math.abs(playerX - 90) <= 15 and math.abs(playerY - 385) <= 15 then
                                 playerX = 205; playerY = 419 + 12
                             else
-                                playerX = 331 - 12; playerY = 512
+                                gameState = "MAP"; currentRoom = nil
                             end
                         elseif currentRoom.name == "Library" then
                             if math.abs(playerX - 147) <= 15 and math.abs(playerY - 337) <= 15 then
@@ -442,19 +467,19 @@ if currentRoom.name == "Dining Room" then
                             elseif math.abs(playerX - 243) <= 15 and math.abs(playerY - 274) <= 15 then
                                 playerX = 354 - 12; playerY = 309
                             else
-                                playerX = 290; playerY = 296
+                                gameState = "MAP"; currentRoom = nil
                             end
                         elseif currentRoom.name == "Study" then
                             if math.abs(playerX - 224) <= 15 and math.abs(playerY - 136) <= 15 then
                                 playerX = 361 - 12; playerY = 204
                             else
-                                playerX = 300; playerY = 180
+                                gameState = "MAP"; currentRoom = nil
                             end
                         elseif currentRoom.name == "Lounge" then
                             if math.abs(playerX - 566) <= 15 and math.abs(playerY - 196) <= 15 then
                                 playerX = 660; playerY = 215 - 12
                             else
-                                playerX = 660; playerY = 150
+                                gameState = "MAP"; currentRoom = nil
                             end
                         elseif currentRoom.name == "Hall" then
                             if math.abs(playerX - 398) <= 15 and math.abs(playerY - 220) <= 15 then
@@ -462,45 +487,30 @@ if currentRoom.name == "Dining Room" then
                             elseif math.abs(playerX - 323) <= 15 and math.abs(playerY - 157) <= 15 then
                                 playerX = 462 + 12; playerY = 174
                             else
-                                playerX = 490; playerY = 160
+                                gameState = "MAP"; currentRoom = nil
                             end
-elseif currentRoom.name == "Kitchen" then
-            -- Match your precise entry point at Map 617, 555
-            if math.abs(playerX - 617) <= 15 and math.abs(playerY - 555) <= 15 then
-                playerX = 748
-                playerY = 590 + 12 -- Spawn slightly down to step inside cleanly
-            else
-                -- Cancel entry if they hit a wall boundary instead of a door
-                gameState = "MAP"; currentRoom = nil
-            end
                         end
                     end
 
-                -- ==========================================================
-                -- 2. EXIT LOGIC: ROOM_VIEW -> MAP
-                -- ==========================================================
                 elseif gameState == "ROOM_VIEW" and currentRoom then
                     if currentRoom.name == "Dining Room" then
                         if math.abs(playerX - 638) <= playerSpeed and math.abs(playerY - 403) <= 15 then
                             gameState = "MAP"; currentRoom = nil; playerX = 530 - 12; playerY = 391
                         elseif math.abs(playerX - 674) <= 15 and math.abs(playerY - 322) <= playerSpeed then
                             gameState = "MAP"; currentRoom = nil; playerX = 563; playerY = 304 - 12
-                        else
-                            local leftRoom = checkRoomTransitions(playerX, playerY)
-                            if not leftRoom then currentRoom = nil; gameState = "MAP" end
                         end
                     elseif currentRoom.name == "Kitchen" then
-                        if math.abs(playerX - 744) <= 15 and math.abs(playerY - 584) <= (playerSpeed + 2) then
-                            gameState = "MAP"; currentRoom = nil; playerX = 617; playerY = 565 - 12
+                        if math.abs(playerX - 748) <= 15 and math.abs(playerY - 590) <= (playerSpeed + 2) then
+                            gameState = "MAP"; currentRoom = nil; playerX = 617; playerY = 555 - 12
                         end
                     elseif currentRoom.name == "Ballroom" then
                         if math.abs(playerX - 409) <= playerSpeed and math.abs(playerY - 605) <= 15 then
                             gameState = "MAP"; currentRoom = nil; playerX = 290 - 12; playerY = 598
-elseif math.abs(playerX - 436) <= 15 and math.abs(playerY - 557) <= playerSpeed then
-gameState = "MAP"; currentRoom = nil; playerX = 326; playerY = 535 - 12
-elseif math.abs(playerX - 525) <= 15 and math.abs(playerY - 557) <= playerSpeed then
-gameState = "MAP"; currentRoom = nil; playerX = 464; playerY = 535 - 12
-elseif math.abs(playerX - 562) <= playerSpeed and math.abs(playerY - 605) <= 15 then
+                        elseif math.abs(playerX - 436) <= 15 and math.abs(playerY - 557) <= playerSpeed then
+                            gameState = "MAP"; currentRoom = nil; playerX = 326; playerY = 535 - 12
+                        elseif math.abs(playerX - 525) <= 15 and math.abs(playerY - 557) <= playerSpeed then
+                            gameState = "MAP"; currentRoom = nil; playerX = 464; playerY = 535 - 12
+                        elseif math.abs(playerX - 562) <= playerSpeed and math.abs(playerY - 605) <= 15 then
 gameState = "MAP"; currentRoom = nil; playerX = 506 + 12; playerY = 598
 end
 elseif currentRoom.name == "Conservatory" then
@@ -534,63 +544,120 @@ elseif math.abs(playerX - 462) <= playerSpeed and math.abs(playerY - 174) <= 15 
 gameState = "MAP"; currentRoom = nil; playerX = 323 - 12; playerY = 157
 end
 end
-end -- Close Exit Logic block
-end -- Close Moved block
-end -- Close Movement check block
+
+
+-- AUTO-TRIGGER INTERROGATION ON APPROACH
+if currentRoom then
+for i = 1, #suspects do
+local suspect = suspects[i]
+if suspect.assignedRoomName == currentRoom.name then
+local distX = math.abs(playerX - suspect.worldX)
+local distY = math.abs(playerY - suspect.worldY)
+if distX <= 16 and distY <= 16 then
+activeSpeaker = suspect.name
+gameState = "DIALOGUE"
+local unrevealedCards = {}
+for idx, aiRow in ipairs(suspect.notepad) do
+if not aiRow.isHeader and aiRow.checked == false then
+local humanDiscovered = false
+for _, humanRow in ipairs(checklist) do
+if humanRow.name == aiRow.name and humanRow.checked then
+humanDiscovered = true
+break
+end
+end
+if not humanDiscovered then
+table.insert(unrevealedCards, aiRow.name)
+end
+end
+end
+if #unrevealedCards > 0 then
+local pickedCard = unrevealedCards[math.random(1, #unrevealedCards)]
+dialogueText = string.format("I can prove that it wasn't the %s. Let me mark that on your checklist.", pickedCard:upper())
+for _, humanRow in ipairs(checklist) do
+if humanRow.name == pickedCard then
+humanRow.checked = true
+break
+end
+end
+else
+dialogueText = "I've already told you everything I know about this case."
+end
+break
+end
+end
+end -- End Suspect loop
+end -- End Safety Guard Check
+end -- End State Check
+end -- End Moved block
+end -- End Movement check block
 cameraX = playerX - (SCREEN_WIDTH / 2) + (playerSize / 2)
 if cameraX < 0 then cameraX = 0
 elseif cameraX > (MAP_WIDTH - SCREEN_WIDTH) then cameraX = MAP_WIDTH - SCREEN_WIDTH end
 cameraY = playerY - (SCREEN_HEIGHT / 2) + (playerSize / 2)
 if cameraY < 0 then cameraY = 0
 elseif cameraY > (MAP_HEIGHT - SCREEN_HEIGHT) then cameraY = MAP_HEIGHT - SCREEN_HEIGHT end
-end -- Close Main game block
-end -- Close handleDpadInput function
+end
+end
 local function handleCrankInput()
-    -- 1. If the crank is docked, always drop back to the standard map view
-    if playdate.isCrankDocked() then
-        if gameState == "MAP_FULL" then gameState = "MAP" end
-        return
-    end
-    
-    -- 2. LOCKOUT RIGID STATE CHECKER
-    -- Only allow the crank to toggle the full-screen map if the player is explicitly
-    -- on the main map. If they are in the NOTEPAD or ROOM_VIEW, the crank is ignored.
-    if gameState == "MAP" or gameState == "MAP_FULL" then
-        local crankChange = playdate.getCrankChange()
-        if crankChange > 2 then 
-            gameState = "MAP_FULL"
-        elseif crankChange < -2 then 
-            gameState = "MAP" 
-        end
-    end
+if playdate.isCrankDocked() then
+if gameState == "MAP_FULL" then gameState = "MAP" end
+return
+end
+if gameState == "MAP" or gameState == "MAP_FULL" then
+local crankChange = playdate.getCrankChange()
+if crankChange > 2 then gameState = "MAP_FULL"
+elseif crankChange < -2 then gameState = "MAP" end
+end
+end
+function playdate.BButtonDown()
+if gameState == "DIALOGUE" then
+return
+elseif gameState == "NOTEPAD" then
+gameState = stateBeforeNotepad
+else
+if gameState == "MAP" or gameState == "ROOM_VIEW" then
+stateBeforeNotepad = gameState
+gameState = "NOTEPAD"
+end
+end
+end
+function playdate.AButtonDown()
+if gameState == "NOTEPAD" then
+local currentItem = checklist[selectedIndex]
+if currentItem and not currentItem.isHeader then
+currentItem.checked = not currentItem.checked
+end
+elseif gameState == "DIALOGUE" then
+gameState = "ROOM_VIEW"
+activeSpeaker = ""
+dialogueText = ""
+end
 end
 -- ==========================================================
 -- MAIN ENGINE UPDATE LOOP (KEEP AT THE VERY BOTTOM OF FILE)
 -- ==========================================================
 function playdate.update()
 gfx.clear()
--- Process calculations
 handleDpadInput()
 handleCrankInput()
--- Global scale initializer
 playdate.display.setScale(1)
--- State Rendering Routers
-    if gameState == "MAP" then
-        if roomBackgrounds.mansion then
-            roomBackgrounds.mansion:draw(-cameraX, -cameraY)
-        end
-        
-        -- DRAW SPRITE ON THE MAIN MAP (Using global camera offsets)
-        if playerSpriteImage then
-            playerSpriteImage:draw(playerX - cameraX, playerY - cameraY)
-        else
-            -- Backup safety circle if asset fails to load
-            gfx.setColor(gfx.kColorWhite)
-            gfx.fillEllipseInRect(playerX - cameraX, playerY - cameraY, playerSize, playerSize)
-            gfx.setColor(gfx.kColorBlack)
-            gfx.drawEllipseInRect(playerX - cameraX, playerY - cameraY, playerSize, playerSize)
-        end
--- Bottom HUD bar
+if gameState == "MAP" then
+if roomBackgrounds.mansion then
+roomBackgrounds.mansion:draw(-cameraX, -cameraY)
+end
+if playerSpriteImage then
+playerSpriteImage:draw(playerX - cameraX, playerY - cameraY)
+else
+gfx.setColor(gfx.kColorWhite)
+gfx.fillEllipseInRect(playerX - cameraX, playerY - cameraY, playerSize, playerSize)
+gfx.setColor(gfx.kColorBlack)
+gfx.drawEllipseInRect(playerX - cameraX, playerY - cameraY, playerSize, playerSize)
+end
+gfx.setColor(gfx.kColorBlack)
+gfx.fillRect(0, 0, SCREEN_WIDTH, 20)
+gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
+gfx.drawText(string.format("STEPS: %i | ACCUSATIONS: %i", playerTilesLeft, totalAccusationsLeft), 10, 2)
 gfx.setColor(gfx.kColorBlack)
 gfx.fillRect(0, SCREEN_HEIGHT - 20, SCREEN_WIDTH, 20)
 local roomString = "Path"
@@ -603,70 +670,69 @@ local bottomHudText = string.format("%s | X: %i, Y: %i", roomString, playerX, pl
 gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
 gfx.drawText(bottomHudText, 10, SCREEN_HEIGHT - 18)
 gfx.setImageDrawMode(gfx.kDrawModeCopy)
-    elseif gameState == "MAP_FULL" then
-        if roomBackgrounds.board then
-            -- 1. Draw the centered background board image
-            local boardWidth, boardHeight = roomBackgrounds.board:getSize()
-            local centeredX = (SCREEN_WIDTH - boardWidth) / 2
-            local centeredY = (SCREEN_HEIGHT - boardHeight) / 2
-            roomBackgrounds.board:draw(centeredX, centeredY)
-            
-            -- 2. Calculate player percentage position across the 800x800 world map
-            local percentX = playerX / MAP_WIDTH
-            local percentY = playerY / MAP_HEIGHT
-            
-            -- 3. Translate that percentage to the mini-map size, adding the screen centering offsets
-            -- We center the tracking point by subtracting half the player size (6px)
-            local targetX = centeredX + (percentX * boardWidth) - (playerSize / 2)
-            local targetY = centeredY + (percentY * boardHeight) - (playerSize / 2)
-            
-            -- 4. Draw a flashing or distinct location target marker
-            -- Using playdate.getElapsedTime() creates a clean, automatic blinking effect
-            if math.floor(playdate.getElapsedTime() * 4) % 2 == 0 then
-                -- Inner white core dot
-                gfx.setColor(gfx.kColorWhite)
-                gfx.fillEllipseInRect(targetX, targetY, playerSize, playerSize)
-                -- Outer black crosshair ring
-                gfx.setColor(gfx.kColorBlack)
-                gfx.drawEllipseInRect(targetX - 2, targetY - 2, playerSize + 4, playerSize + 4)
-            else
-                -- Off-flash phase: solid black point for visibility
-                gfx.setColor(gfx.kColorBlack)
-                gfx.fillEllipseInRect(targetX, targetY, playerSize, playerSize)
-                gfx.setColor(gfx.kColorWhite)
-                gfx.drawEllipseInRect(targetX, targetY, playerSize, playerSize)
-            end
-        end
-    elseif gameState == "ROOM_VIEW" then
-        if currentRoom and currentRoom.img then
-            currentRoom.img:draw(0, 20)
-        else
-            gfx.drawText("Error: Room asset missing!", 20, 20)
-        end
-        
-        local localPlayerX = 200
-        local localPlayerY = 120
-        if currentRoom then
-            localPlayerX = playerX - currentRoom.x
-            localPlayerY = (playerY - currentRoom.y) + 20
-        end
-        
-        -- DRAW SPRITE INSIDE ROOM VIEW (Using localized room view calculations)
-        if playerSpriteImage then
-            playerSpriteImage:draw(localPlayerX, localPlayerY)
-        else
-            -- Backup safety circle if asset fails to load
-            gfx.setColor(gfx.kColorWhite)
-            gfx.fillEllipseInRect(localPlayerX, localPlayerY, playerSize, playerSize)
-            gfx.setColor(gfx.kColorBlack)
-            gfx.drawEllipseInRect(localPlayerX, localPlayerY, playerSize, playerSize)
-        end
--- Top Room HUD
+elseif gameState == "MAP_FULL" then
+if roomBackgrounds.board then
+local boardWidth, boardHeight = roomBackgrounds.board:getSize()
+local centeredX = (SCREEN_WIDTH - boardWidth) / 2
+local centeredY = (SCREEN_HEIGHT - boardHeight) / 2
+roomBackgrounds.board:draw(centeredX, centeredY)
+local percentX = playerX / MAP_WIDTH
+local percentY = playerY / MAP_HEIGHT
+local targetX = centeredX + (percentX * boardWidth) - (playerSize / 2)
+local targetY = centeredY + (percentY * boardHeight) - (playerSize / 2)
+if math.floor(playdate.getElapsedTime() * 4) % 2 == 0 then
+gfx.setColor(gfx.kColorWhite)
+gfx.fillEllipseInRect(targetX, targetY, playerSize, playerSize)
+gfx.setColor(gfx.kColorBlack)
+gfx.drawEllipseInRect(targetX - 2, targetY - 2, playerSize + 4, playerSize + 4)
+else
+gfx.setColor(gfx.kColorBlack)
+gfx.fillEllipseInRect(targetX, targetY, playerSize, playerSize)
+gfx.setColor(gfx.kColorWhite)
+gfx.drawEllipseInRect(targetX, targetY, playerSize, playerSize)
+end
+end
+elseif gameState == "ROOM_VIEW" then
+if currentRoom and currentRoom.img then
+currentRoom.img:draw(0, 20)
+else
+gfx.drawText("Error: Room asset missing!", 20, 20)
+end
+if currentRoom then
+for i = 1, #suspects do
+local suspect = suspects[i]
+if suspect.assignedRoomName == currentRoom.name then
+local localSuspectX = suspect.worldX - currentRoom.x
+local localSuspectY = (suspect.worldY - currentRoom.y) + 20
+if suspect.img then
+suspect.img:draw(localSuspectX, localSuspectY)
+else
+gfx.setColor(gfx.kColorBlack)
+gfx.fillEllipseInRect(localSuspectX, localSuspectY, playerSize, playerSize)
+gfx.setColor(gfx.kColorWhite)
+gfx.drawEllipseInRect(localSuspectX, localSuspectY, playerSize, playerSize)
+end
+end
+end
+end
+local localPlayerX = 200
+local localPlayerY = 120
+if currentRoom then
+localPlayerX = playerX - currentRoom.x
+localPlayerY = (playerY - currentRoom.y) + 20
+end
+if playerSpriteImage then
+playerSpriteImage:draw(localPlayerX, localPlayerY)
+else
+gfx.setColor(gfx.kColorWhite)
+gfx.fillEllipseInRect(localPlayerX, localPlayerY, playerSize, playerSize)
+gfx.setColor(gfx.kColorBlack)
+gfx.drawEllipseInRect(localPlayerX, localPlayerY, playerSize, playerSize)
+end
 gfx.setColor(gfx.kColorBlack)
 gfx.fillRect(0, 0, SCREEN_WIDTH, 20)
 gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
 gfx.drawText(string.format("STEPS: %i | ACCUSATIONS: %i", playerTilesLeft, totalAccusationsLeft), 10, 2)
--- Bottom Room HUD
 gfx.setColor(gfx.kColorBlack)
 gfx.fillRect(0, SCREEN_HEIGHT - 20, SCREEN_WIDTH, 20)
 local roomName = currentRoom and currentRoom.name or "Unknown"
@@ -699,6 +765,34 @@ end
 gfx.drawText(item.name, 65, currentY)
 end
 end
+end
+elseif gameState == "DIALOGUE" then
+if currentRoom and currentRoom.img then
+currentRoom.img:draw(0, 20)
+end
+if currentRoom then
+for i = 1, #suspects do
+local suspect = suspects[i]
+if suspect.assignedRoomName == currentRoom.name then
+local localSuspectX = suspect.worldX - currentRoom.x
+local localSuspectY = (suspect.worldY - currentRoom.y) + 20
+if suspect.img then suspect.img:draw(localSuspectX, localSuspectY) end
+end
+end
+end
+local localPlayerX = playerX - currentRoom.x
+local localPlayerY = (playerY - currentRoom.y) + 20
+if playerSpriteImage then playerSpriteImage:draw(localPlayerX, localPlayerY) end
+gfx.setImageDrawMode(gfx.kDrawModeCopy)
+gfx.setColor(gfx.kColorWhite)
+gfx.fillRect(15, SCREEN_HEIGHT - 75, SCREEN_WIDTH - 30, 60)
+gfx.setColor(gfx.kColorBlack)
+gfx.drawRect(15, SCREEN_HEIGHT - 75, SCREEN_WIDTH - 30, 60)
+gfx.drawRect(17, SCREEN_HEIGHT - 73, SCREEN_WIDTH - 34, 56)
+gfx.drawText(activeSpeaker:upper(), 25, SCREEN_HEIGHT - 70)
+gfx.drawTextInRect(dialogueText, 25, SCREEN_HEIGHT - 52, SCREEN_WIDTH - 50, 35, 0, kTextAlignLeft)
+if math.floor(playdate.getElapsedTime() * 3) % 2 == 0 then
+gfx.drawText("(A) NEXT", SCREEN_WIDTH - 85, SCREEN_HEIGHT - 30)
 end
 end
 end
