@@ -7,7 +7,7 @@ local gfx <const> = playdate.graphics
 -- Simplified States & Variables
 local gameState = "TITLE" 
 local totalAccusationsLeft = 4
-local playerTilesLeft = 100 -- FIXED: Limited starting pool to exactly 100 steps
+local playerTilesLeft = 100 -- Pool limited to exactly 100 steps
 local pixelRemainder = 0       
 local currentRoom = nil
 
@@ -24,6 +24,10 @@ local CRANK_THRESHOLD <const> = 30
 
 local notepadCrankTicks = 0
 local NOTEPAD_CRANK_THRESHOLD <const> = 25 -- Lower value = faster scrolling speed
+
+-- Tutorial Scroll Variables
+local tutorialScrollY = 0
+local tutorialMaxScroll = 240 -- Extra padding room for single column content scroll length
 
 -- Track what state we were in before hitting pause
 local stateBeforePause = "MAP"
@@ -249,11 +253,10 @@ local function populateDynamicLists()
             if not row.checked then
                 if sortingMode == "KILLER" then table.insert(dynamicKillers, row.name)
                 elseif sortingMode == "WEAPON" then table.insert(dynamicWeapons, row.name)
-                elseif sortingMode == "ROOM" then table.insert(dynamicRooms, row.name) end
-            end
-        end
-    end
--- Safety mechanism: if player crosses off absolute solution targets, always include at least the true answers
+elseif sortingMode == "ROOM" then table.insert(dynamicRooms, row.name) end
+end
+end
+end
 if #dynamicKillers == 0 then table.insert(dynamicKillers, caseFile.killer) end
 if #dynamicWeapons == 0 then table.insert(dynamicWeapons, caseFile.weapon) end
 if #dynamicRooms == 0 then table.insert(dynamicRooms, caseFile.room) end
@@ -265,7 +268,7 @@ end
 -- ==========================================================
 local function resetGameEngine()
 totalAccusationsLeft = 4
-playerTilesLeft = 100 -- FIXED: Restores exactly 100 steps upon custom game engine reset
+playerTilesLeft = 100
 pixelRemainder = 0
 currentRoom = nil
 selectedIndex = 2
@@ -274,6 +277,7 @@ activeSpeaker = ""
 dialogueText = ""
 crankTicks = 0
 notepadCrankTicks = 0
+tutorialScrollY = 0
 checklist = createBlankNotepad()
 for i = 1, #suspects do
 suspects[i].notepad = createBlankNotepad()
@@ -332,20 +336,17 @@ local selectedSpawn = startingSpawns[chosenSpawnIndex]
 playerX = selectedSpawn.x
 playerY = selectedSpawn.y
 end
--- Initialize the first loop parameters safely on compilation
 resetGameEngine()
 -- ==========================================================
 -- SYSTEM MENU INTEGRATION
 -- ==========================================================
 local menu = playdate.getSystemMenu()
--- 1. Pause Option
 local pauseMenuItem, error = menu:addMenuItem("Pause Game", function()
-if gameState ~= "TITLE" and gameState ~= "GAME_OVER" and gameState ~= "PAUSE" then
+if gameState ~= "TITLE" and gameState ~= "GAME_OVER" and gameState ~= "PAUSE" and gameState ~= "TUTORIAL" then
 stateBeforePause = gameState
 gameState = "PAUSE"
 end
 end)
--- 2. Restart Option
 local restartMenuItem, error = menu:addMenuItem("Restart Game", function()
 resetGameEngine()
 gameState = "TITLE"
@@ -369,7 +370,6 @@ else
 local color = currentRoom.runtimeMask:sample(localX, localY)
 if color == gfx.kColorWhite or color == 1 then
 if currentRoom.name == "Dining Room" and localX >= 255 and localX <= 260 then
--- Exception check pathing allowance
 else
 return false
 end
@@ -406,6 +406,14 @@ return nil
 end
 local function handleDpadInput()
 if gameState == "TITLE" or gameState == "GAME_OVER" or gameState == "PAUSE" or gameState == "NOTEPAD" then
+return
+end
+if gameState == "TUTORIAL" then
+if playdate.buttonIsPressed(playdate.kButtonUp) then
+tutorialScrollY = math.max(0, tutorialScrollY - 4)
+elseif playdate.buttonIsPressed(playdate.kButtonDown) then
+tutorialScrollY = math.min(tutorialMaxScroll, tutorialScrollY + 4)
+end
 return
 end
 if gameState == "ACCUSE_WEAPON" then
@@ -611,7 +619,6 @@ gameState = "MAP"; currentRoom = nil; playerX = 323 - 12; playerY = 157
 end
 end
 end
--- AUTO-TRIGGER INTERROGATION ON APPROACH
 if currentRoom then
 for i = 1, #suspects do
 local suspect = suspects[i]
@@ -664,21 +671,24 @@ elseif cameraY > (MAP_HEIGHT - SCREEN_HEIGHT) then cameraY = MAP_HEIGHT - SCREEN
 end
 end
 local function handleCrankInput()
+local crankChange = playdate.getCrankChange()
+if gameState == "TUTORIAL" then
+if not playdate.isCrankDocked() then
+tutorialScrollY = math.max(0, math.min(tutorialMaxScroll, tutorialScrollY + (crankChange * 0.8)))
+end
+return
+end
 if playdate.isCrankDocked() then
 if gameState == "MAP_FULL" then gameState = "MAP" end
 crankTicks = 0
 notepadCrankTicks = 0
 return
 end
-local crankChange = playdate.getCrankChange()
--- 1. NOTEPAD STATE: Use crank to control list scrolling highlight (with clamped boundaries)
 if gameState == "NOTEPAD" then
 notepadCrankTicks = notepadCrankTicks + crankChange
--- Turning forward rolls downstream (down the list)
 if notepadCrankTicks > NOTEPAD_CRANK_THRESHOLD then
 local nextIndex = selectedIndex
 local found = false
--- Find the next non-header item down the list
 while nextIndex < #checklist do
 nextIndex = nextIndex + 1
 if not checklist[nextIndex].isHeader then
@@ -686,15 +696,11 @@ found = true
 break
 end
 end
-if found then
-selectedIndex = nextIndex
-end
+if found then selectedIndex = nextIndex end
 notepadCrankTicks = 0
--- Turning backward rolls upstream (up the list)
 elseif notepadCrankTicks < -NOTEPAD_CRANK_THRESHOLD then
 local prevIndex = selectedIndex
 local found = false
--- Find the next non-header item up the list
 while prevIndex > 1 do
 prevIndex = prevIndex - 1
 if not checklist[prevIndex].isHeader then
@@ -702,18 +708,14 @@ found = true
 break
 end
 end
-if found then
-selectedIndex = prevIndex
-end
+if found then selectedIndex = prevIndex end
 notepadCrankTicks = 0
 end
--- Sync rendering scroll layout safely
 if selectedIndex - scrollOffset > 7 then
 scrollOffset = selectedIndex - 7
 elseif selectedIndex - scrollOffset < 2 then
 scrollOffset = math.max(0, selectedIndex - 2)
 end
--- 2. MAP MODES: Use crank to cycle zoom maps
 elseif gameState == "MAP" or gameState == "MAP_FULL" then
 crankTicks = crankTicks + crankChange
 if crankTicks > CRANK_THRESHOLD then
@@ -730,7 +732,7 @@ if gameState == "PAUSE" then
 gameState = stateBeforePause
 return
 end
-if gameState == "TITLE" or gameState == "GAME_OVER" then
+if gameState == "TITLE" or gameState == "TUTORIAL" or gameState == "GAME_OVER" then
 return
 end
 if gameState == "DIALOGUE" then
@@ -773,7 +775,7 @@ else
 if gameState == "MAP" or gameState == "ROOM_VIEW" then
 stateBeforeNotepad = gameState
 gameState = "NOTEPAD"
-notepadCrankTicks = 0 -- clear historical ticks
+notepadCrankTicks = 0
 end
 end
 end
@@ -787,6 +789,10 @@ gameState = "TITLE"
 return
 end
 if gameState == "TITLE" then
+gameState = "TUTORIAL"
+return
+end
+if gameState == "TUTORIAL" then
 gameState = "MAP"
 return
 end
@@ -850,6 +856,44 @@ gfx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
 gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
 gfx.drawTextAligned("MANSION MURDER MYSTERY", SCREEN_WIDTH / 2, 80, gfx.kTextAlignmentCenter)
 end
+gfx.setImageDrawMode(gfx.kDrawModeCopy)
+elseif gameState == "TUTORIAL" then
+-- FIXED: Uniform solid black layout window style matching request constraints
+gfx.setColor(gfx.kColorBlack)
+gfx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
+gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
+-- Header (Centered, no background overlay block)
+gfx.drawTextAligned("TUTORIAL", SCREEN_WIDTH / 20, 16, gfx.kTextAlignmentCenter)
+gfx.setColor(gfx.kColorWhite)
+gfx.fillRect(20, 36, SCREEN_WIDTH - 40, 1)
+-- Scrolling text layout viewport boundary masks (Pushed context lower)
+gfx.setClipRect(20, 44, SCREEN_WIDTH - 40, 144)
+local drawY = 48 - tutorialScrollY
+-- Body Content strings (Cleaned of asterisks to eliminate bad symbol boxes)
+gfx.drawText("MISSION OBJECTIVE:", 24, drawY)
+gfx.drawText("Find the hidden combination of Killer, Weapon,", 24, drawY + 18)
+gfx.drawText("and Room sealed inside the secret envelope.", 24, drawY + 34)
+gfx.drawText("STEP BUDGET:", 24, drawY + 64)
+gfx.drawText("You begin with 100 steps. Moving subtracts steps.", 24, drawY + 82)
+gfx.drawText("If steps hit 0 before you solve it, you lose!", 24, drawY + 98)
+gfx.drawText("INVESTIGATION CONTROLS:", 24, drawY + 128)
+gfx.drawText("• D-Pad: Move character through corridors.", 24, drawY + 146)
+gfx.drawText("• Crank: Turn crank to scroll the text logs.", 24, drawY + 162)
+gfx.drawText("• (B) Button: Open/Close your Notepad log.", 24, drawY + 178)
+gfx.drawText("• (A) Button: Confirm choices or accuse targets.", 24, drawY + 194)
+gfx.drawText("DETECTION TIPS:", 24, drawY + 224)
+gfx.drawText("Walk up to suspects inside rooms. They will show", 24, drawY + 242)
+gfx.drawText("you clues to automatically cross entries off.", 24, drawY + 258)
+gfx.clearClipRect()
+-- Footer Prompt (Uniform background, no blocking box overlays)
+gfx.fillRect(20, 194, SCREEN_WIDTH - 40, 1)
+if math.floor(playdate.getElapsedTime() * 3) % 2 == 0 then
+gfx.drawTextAligned("PRESS (A) TO START", SCREEN_WIDTH / 2, 206, gfx.kTextAlignmentCenter)
+end
+-- Dithered side layout vertical tracking scroll thumb indicator bar
+local scrollPercentage = tutorialScrollY / tutorialMaxScroll
+local barY = 44 + (scrollPercentage * 125)
+gfx.fillRect(SCREEN_WIDTH - 16, barY, 3, 14)
 gfx.setImageDrawMode(gfx.kDrawModeCopy)
 elseif gameState == "MAP" then
 if roomBackgrounds.mansion then
