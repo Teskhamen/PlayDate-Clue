@@ -5,9 +5,11 @@ import "CoreLibs/ui"
 local gfx <const> = playdate.graphics
 
 -- Simplified States & Variables
-local gameState = "MAP" 
+local gameState = "TITLE" 
 local totalAccusationsLeft = 4
 local playerTilesLeft = 10 
+local pixelRemainder = 0       
+local currentRoom = nil
 
 local SCREEN_WIDTH <const> = 400
 local SCREEN_HEIGHT <const> = 240
@@ -26,6 +28,18 @@ end
 local playerSpriteImage = gfx.image.new("images/player")
 if not playerSpriteImage then
     print("Warning: Could not load images/player.png")
+end
+
+-- Load your custom 400x240 Procreate splash illustration once globally
+local titleImage = gfx.image.new("images/Title_Page")
+if not titleImage then
+    print("Warning: Could not load images/Title_Page.png")
+end
+
+-- Load your custom 400x240 Procreate game over illustration once globally
+local gameOverImage = gfx.image.new("images/End_Page")
+if not gameOverImage then
+    print("Warning: Could not load images/End_Page.png")
 end
 
 -- ==========================================================
@@ -66,8 +80,8 @@ local rooms = {
     { name = "Ballroom",     x = 296, y = 541, w = 201, h = 144, img = roomBackgrounds.ballroom,     mask = roomBackgrounds.ballRoomMask },
     { name = "Kitchen",      x = 590, y = 568, w = 150, h = 153, img = roomBackgrounds.kitchen,      mask = roomBackgrounds.kitchenMask }
 }
-rooms[6].maskW = 400
-rooms[6].maskH = 200
+rooms.maskW = 400
+rooms.maskH = 200
 
 for i, room in ipairs(rooms) do
     if room.mask then
@@ -92,11 +106,11 @@ local suspects = {
 -- ==========================================================
 -- MASTER NOTEBOOK TEMPLATES & DEALING ENGINE
 -- ==========================================================
-local masterKillers = { "Miss Scarlet", "Colonel Mustard", "Mrs. White", "Mr. Green", "Mrs. Peacock", "Professor Plum" }
-local masterWeapons = { "Candlestick", "Dagger", "Lead Pipe", "Revolver", "Rope", "Wrench" }
-local masterRooms   = { "Kitchen", "Ballroom", "Conservatory", "Dining Room", "Game Room", "Library", "Lounge", "Hall", "Study" }
-
+local masterKillers = {}
+local masterWeapons = {}
+local masterRooms   = {}
 local caseFile = { killer = "", weapon = "", room = "" }
+local checklist = {}
 
 local function createBlankNotepad()
     return {
@@ -129,11 +143,6 @@ local function createBlankNotepad()
     }
 end
 
-local checklist = createBlankNotepad()
-for i = 1, #suspects do
-    suspects[i].notepad = createBlankNotepad()
-end
-
 local function shuffleStrings(t)
     for i = #t, 2, -1 do
         local j = math.random(1, i)
@@ -149,41 +158,6 @@ local function crossOffCard(notebook, cardName)
         end
     end
 end
-
-math.randomseed(playdate.getSecondsSinceEpoch())
-math.random() math.random() -- Clear initial predictable seed structures
-
-local winKillerIdx = math.random(1, #masterKillers)
-local winWeaponIdx = math.random(1, #masterWeapons)
-local winRoomIdx   = math.random(1, #masterRooms)
-
-caseFile.killer = table.remove(masterKillers, winKillerIdx)
-caseFile.weapon = table.remove(masterWeapons, winWeaponIdx)
-caseFile.room   = table.remove(masterRooms, winRoomIdx)
-
-local dealPool = {}
-for i = 1, #masterKillers do table.insert(dealPool, masterKillers[i]) end
-for i = 1, #masterWeapons do table.insert(dealPool, masterWeapons[i]) end
-for i = 1, #masterRooms do table.insert(dealPool, masterRooms[i]) end
-
-shuffleStrings(dealPool)
-
-local totalParticipants = 1 + #suspects
-for turn = 1, #dealPool do
-    local card = dealPool[turn]
-    local targetSeat = (turn - 1) % totalParticipants
-    
-    if targetSeat == 0 then
-        crossOffCard(checklist, card)
-    else
-        local AI = suspects[targetSeat]
-        crossOffCard(AI.notepad, card)
-        table.insert(AI.hand, card) 
-    end
-end
-
-print("=== CASE FILE HIDDEN ===")
-print("Solution: " .. caseFile.killer .. " with the " .. caseFile.weapon .. " in the " .. caseFile.room)
 
 local innerRoomSafeSpots = {
     ["Study"]        = { x = 200, y = 90  },
@@ -204,32 +178,6 @@ local function shuffleTable(t)
     end
 end
 
-for _, suspect in ipairs(suspects) do
-    suspect.assignedRoomName = nil
-    suspect.worldX = 0
-    suspect.worldY = 0
-end
-
-local poolOfRooms = {}
-for _, room in ipairs(rooms) do
-    table.insert(poolOfRooms, room.name)
-end
-shuffleTable(poolOfRooms)
-
-for i, suspect in ipairs(suspects) do
-    local roomName = poolOfRooms[i]
-    suspect.assignedRoomName = roomName
-    
-    for _, room in ipairs(rooms) do
-        if room.name == roomName then
-            local offset = innerRoomSafeSpots[roomName] or { x = 200, y = 100 }
-            suspect.worldX = room.x + offset.x
-            suspect.worldY = room.y + offset.y
-            break
-        end
-    end
-end
-
 local startingSpawns = {
     { x = 734, y = 247 }, { x = 734, y = 538 },
     { x = 470, y = 742 }, { x = 323, y = 742 },
@@ -237,16 +185,9 @@ local startingSpawns = {
     { x = 266, y = 49  }, { x = 527, y = 49  }
 }
 
-local chosenSpawnIndex = math.random(1, #startingSpawns)
-local selectedSpawn = startingSpawns[chosenSpawnIndex]
-
-local playerX = selectedSpawn.x
-local playerY = selectedSpawn.y
+local playerX, playerY
 local playerSize = 12 
 local playerSpeed = 3          
-local pixelRemainder = 0       
-local currentRoom = nil
-
 local cameraX = 0
 local cameraY = 0
 
@@ -262,6 +203,86 @@ local finalAccuseWeapon = ""
 local finalAccuseRoom = ""
 local masterWeaponList = { "Candlestick", "Dagger", "Lead Pipe", "Revolver", "Rope", "Wrench" }
 local masterRoomList = { "Kitchen", "Ballroom", "Conservatory", "Dining Room", "Game Room", "Library", "Lounge", "Hall", "Study" }
+
+-- ==========================================================
+-- MASTER GAME ENGINE SYSTEM RESET INTERFACE
+-- ==========================================================
+local function resetGameEngine()
+    totalAccusationsLeft = 4
+    playerTilesLeft = 10
+    pixelRemainder = 0
+    currentRoom = nil
+    selectedIndex = 2
+    scrollOffset = 0
+    activeSpeaker = ""
+    dialogueText = ""
+    
+    checklist = createBlankNotepad()
+    for i = 1, #suspects do
+        suspects[i].notepad = createBlankNotepad()
+        suspects[i].hand = {}
+        suspects[i].assignedRoomName = nil
+    end
+    
+    masterKillers = { "Miss Scarlet", "Colonel Mustard", "Mrs. White", "Mr. Green", "Mrs. Peacock", "Professor Plum" }
+    masterWeapons = { "Candlestick", "Dagger", "Lead Pipe", "Revolver", "Rope", "Wrench" }
+    masterRooms   = { "Kitchen", "Ballroom", "Conservatory", "Dining Room", "Game Room", "Library", "Lounge", "Hall", "Study" }
+    
+    math.randomseed(playdate.getSecondsSinceEpoch())
+    math.random() math.random()
+    
+    local winKillerIdx = math.random(1, #masterKillers)
+    local winWeaponIdx = math.random(1, #masterWeapons)
+    local winRoomIdx   = math.random(1, #masterRooms)
+    
+    caseFile.killer = table.remove(masterKillers, winKillerIdx)
+    caseFile.weapon = table.remove(masterWeapons, winWeaponIdx)
+    caseFile.room   = table.remove(masterRooms, winRoomIdx)
+    
+    local dealPool = {}
+    for i = 1, #masterKillers do table.insert(dealPool, masterKillers[i]) end
+    for i = 1, #masterWeapons do table.insert(dealPool, masterWeapons[i]) end
+    for i = 1, #masterRooms do table.insert(dealPool, masterRooms[i]) end
+    
+shuffleStrings(dealPool)
+local totalParticipants = 1 + #suspects
+for turn = 1, #dealPool do
+local card = dealPool[turn]
+local targetSeat = (turn - 1) % totalParticipants
+if targetSeat == 0 then
+crossOffCard(checklist, card)
+else
+local AI = suspects[targetSeat]
+crossOffCard(AI.notepad, card)
+table.insert(AI.hand, card)
+end
+end
+print("=== CASE FILE HIDDEN ===")
+print("Solution: " .. caseFile.killer .. " with the " .. caseFile.weapon .. " in the " .. caseFile.room)
+local poolOfRooms = {}
+for _, room in ipairs(rooms) do
+table.insert(poolOfRooms, room.name)
+end
+shuffleTable(poolOfRooms)
+for i, suspect in ipairs(suspects) do
+local roomName = poolOfRooms[i]
+suspect.assignedRoomName = roomName
+for _, room in ipairs(rooms) do
+if room.name == roomName then
+local offset = innerRoomSafeSpots[roomName] or { x = 200, y = 100 }
+suspect.worldX = room.x + offset.x
+suspect.worldY = room.y + offset.y
+break
+end
+end
+end
+local chosenSpawnIndex = math.random(1, #startingSpawns)
+local selectedSpawn = startingSpawns[chosenSpawnIndex]
+playerX = selectedSpawn.x
+playerY = selectedSpawn.y
+end
+-- Initialize the first loop parameters safely on compilation
+resetGameEngine()
 local function isWalkable(x, y)
 local points = {
 {x = x, y = y},
@@ -303,8 +324,6 @@ end
 end
 return true
 end
-
-
 local function checkRoomTransitions(px, py)
 for _, room in ipairs(rooms) do
 if px >= room.x and px <= (room.x + room.w) and py >= room.y and py <= (room.y + room.h) then
@@ -314,6 +333,9 @@ end
 return nil
 end
 local function handleDpadInput()
+if gameState == "TITLE" or gameState == "GAME_OVER" then
+return
+end
 if gameState == "NOTEPAD" then
 if playdate.buttonJustPressed(playdate.kButtonUp) then
 local startingIndex = selectedIndex
@@ -604,6 +626,9 @@ elseif crankChange < -2 then gameState = "MAP" end
 end
 end
 function playdate.BButtonDown()
+if gameState == "TITLE" or gameState == "GAME_OVER" then
+return
+end
 if gameState == "DIALOGUE" then
 local shiftingSuspect = nil
 for i = 1, #suspects do
@@ -648,6 +673,15 @@ end
 end
 end
 function playdate.AButtonDown()
+if gameState == "GAME_OVER" then
+resetGameEngine()
+gameState = "TITLE"
+return
+end
+if gameState == "TITLE" then
+gameState = "MAP"
+return
+end
 if gameState == "NOTEPAD" then
 local currentItem = checklist[selectedIndex]
 if currentItem and not currentItem.isHeader then
@@ -666,12 +700,12 @@ elseif gameState == "ACCUSE_ROOM" then
 finalAccuseRoom = masterRoomList[accuseRoomIndex]
 gameState = "ACCUSE_SUMMARY"
 elseif gameState == "REVEAL_ENVELOPE" then
-gameState = "DIALOGUE"
+gameState = "GAME_OVER"
 elseif gameState == "ACCUSE_SUMMARY" then
 if activeSpeaker == caseFile.killer and finalAccuseWeapon == caseFile.weapon and finalAccuseRoom == caseFile.room then
 dialogueText = "CORRECT! You solved the case! You found the true killer, weapon, and crime scene."
 gameState = "DIALOGUE"
-totalAccusationsLeft = 999
+totalAccusationsLeft = 0
 else
 totalAccusationsLeft = totalAccusationsLeft - 1
 if totalAccusationsLeft <= 0 then
@@ -694,7 +728,17 @@ function playdate.update()
 gfx.clear()
 handleDpadInput()
 handleCrankInput()
-if gameState == "MAP" then
+if gameState == "TITLE" then
+if titleImage then
+titleImage:draw(0, 0)
+else
+gfx.setColor(gfx.kColorBlack)
+gfx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
+gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
+gfx.drawTextAligned("MANSION MURDER MYSTERY", SCREEN_WIDTH / 2, 80, gfx.kTextAlignmentCenter)
+end
+gfx.setImageDrawMode(gfx.kDrawModeCopy)
+elseif gameState == "MAP" then
 if roomBackgrounds.mansion then
 roomBackgrounds.mansion:draw(-cameraX, -cameraY)
 end
@@ -942,5 +986,17 @@ gfx.drawText("ROOM : " .. caseFile.room:upper(), 60, 135)
 gfx.drawLine(45, 170, 355, 170)
 gfx.drawText("PRESS (A) TO CLOSE CASE ENVELOPE", 65, 185)
 gfx.setImageDrawMode(gfx.kDrawModeCopy)
+elseif gameState == "GAME_OVER" then
+if gameOverImage then
+gameOverImage:draw(0, 0)
+else
+gfx.setColor(gfx.kColorBlack)
+gfx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
+gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
+gfx.drawTextAligned("INVESTIGATION CONCLUDED", SCREEN_WIDTH / 2, 80, gfx.kTextAlignmentCenter)
+end
+-- Draw solid black text centered precisely 50px from the bottom (240 - 50 = 190)
+gfx.setImageDrawMode(gfx.kDrawModeCopy)
+gfx.drawTextAligned("(A) Play Again", SCREEN_WIDTH / 5, 190, gfx.kTextAlignmentCenter)
 end
 end
