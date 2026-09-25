@@ -18,6 +18,21 @@ local SCREEN_HEIGHT <const> = 240
 local MAP_WIDTH <const> = 800
 local MAP_HEIGHT <const> = 800
 
+-- Crank sensitivity tuning accumulators
+local crankTicks = 0
+local CRANK_THRESHOLD <const> = 30
+
+local notepadCrankTicks = 0
+local NOTEPAD_CRANK_THRESHOLD <const> = 25 -- Lower value = faster scrolling speed
+
+-- Track what state we were in before hitting pause
+local stateBeforePause = "MAP"
+
+-- Dynamic Accusation Lists (filtered to items NOT crossed off)
+local dynamicKillers = {}
+local dynamicWeapons = {}
+local dynamicRooms   = {}
+
 -- Load your mask layout safely
 local maskImage = gfx.image.new("images/mask_map")
 if not maskImage then
@@ -40,6 +55,12 @@ end
 local gameOverImage = gfx.image.new("images/End_Page")
 if not gameOverImage then
     print("Warning: Could not load images/End_Page.png")
+end
+
+-- Load your custom 400x240 pause illustration once globally
+local pauseImage = gfx.image.new("images/Pause")
+if not pauseImage then
+    print("Warning: Could not load images/Pause.png")
 end
 
 -- ==========================================================
@@ -159,6 +180,16 @@ local function crossOffCard(notebook, cardName)
     end
 end
 
+-- Helper utility to evaluate if an individual target name is checked off
+local function isCrossedOff(cardName)
+    for _, row in ipairs(checklist) do
+        if not row.isHeader and row.name == cardName then
+            return row.checked
+        end
+    end
+    return false
+end
+
 local innerRoomSafeSpots = {
     ["Study"]        = { x = 200, y = 90  },
     ["Hall"]         = { x = 200, y = 110 },
@@ -201,49 +232,70 @@ local accuseWeaponIndex = 1
 local accuseRoomIndex = 1
 local finalAccuseWeapon = ""
 local finalAccuseRoom = ""
-local masterWeaponList = { "Candlestick", "Dagger", "Lead Pipe", "Revolver", "Rope", "Wrench" }
-local masterRoomList = { "Kitchen", "Ballroom", "Conservatory", "Dining Room", "Game Room", "Library", "Lounge", "Hall", "Study" }
 
+-- Helper function to generate options remaining on notebook checklist
+local function populateDynamicLists()
+    dynamicKillers = {}
+    dynamicWeapons = {}
+    dynamicRooms   = {}
+    
+    local sortingMode = "NONE"
+    for _, row in ipairs(checklist) do
+        if row.isHeader then
+            if string.find(row.category, "KILLERS") then sortingMode = "KILLER"
+            elseif string.find(row.category, "WEAPONS") then sortingMode = "WEAPON"
+            elseif string.find(row.category, "ROOMS") then sortingMode = "ROOM" end
+        else
+            if not row.checked then
+                if sortingMode == "KILLER" then table.insert(dynamicKillers, row.name)
+                elseif sortingMode == "WEAPON" then table.insert(dynamicWeapons, row.name)
+                elseif sortingMode == "ROOM" then table.insert(dynamicRooms, row.name) end
+            end
+        end
+    end
+    
+-- Safety mechanism: if player crosses off absolute solution targets, always include at least the true answers
+if #dynamicKillers == 0 then table.insert(dynamicKillers, caseFile.killer) end
+if #dynamicWeapons == 0 then table.insert(dynamicWeapons, caseFile.weapon) end
+if #dynamicRooms == 0 then table.insert(dynamicRooms, caseFile.room) end
+end
 -- ==========================================================
 -- MASTER GAME ENGINE SYSTEM RESET INTERFACE
 -- ==========================================================
 local function resetGameEngine()
-    totalAccusationsLeft = 4
-    playerTilesLeft = 1000
-    pixelRemainder = 0
-    currentRoom = nil
-    selectedIndex = 2
-    scrollOffset = 0
-    activeSpeaker = ""
-    dialogueText = ""
-    
-    checklist = createBlankNotepad()
-    for i = 1, #suspects do
-        suspects[i].notepad = createBlankNotepad()
-        suspects[i].hand = {}
-        suspects[i].assignedRoomName = nil
-    end
-    
-    masterKillers = { "Miss Scarlet", "Colonel Mustard", "Mrs. White", "Mr. Green", "Mrs. Peacock", "Professor Plum" }
-    masterWeapons = { "Candlestick", "Dagger", "Lead Pipe", "Revolver", "Rope", "Wrench" }
-    masterRooms   = { "Kitchen", "Ballroom", "Conservatory", "Dining Room", "Game Room", "Library", "Lounge", "Hall", "Study" }
-    
-    math.randomseed(playdate.getSecondsSinceEpoch())
-    math.random() math.random()
-    
-    local winKillerIdx = math.random(1, #masterKillers)
-    local winWeaponIdx = math.random(1, #masterWeapons)
-    local winRoomIdx   = math.random(1, #masterRooms)
-    
-    caseFile.killer = table.remove(masterKillers, winKillerIdx)
-    caseFile.weapon = table.remove(masterWeapons, winWeaponIdx)
-    caseFile.room   = table.remove(masterRooms, winRoomIdx)
-    
-    local dealPool = {}
-    for i = 1, #masterKillers do table.insert(dealPool, masterKillers[i]) end
-    for i = 1, #masterWeapons do table.insert(dealPool, masterWeapons[i]) end
-    for i = 1, #masterRooms do table.insert(dealPool, masterRooms[i]) end
-    
+totalAccusationsLeft = 4
+playerTilesLeft = 1000
+pixelRemainder = 0
+currentRoom = nil
+selectedIndex = 2
+scrollOffset = 0
+activeSpeaker = ""
+dialogueText = ""
+crankTicks = 0
+notepadCrankTicks = 0
+
+
+checklist = createBlankNotepad()
+for i = 1, #suspects do
+suspects[i].notepad = createBlankNotepad()
+suspects[i].hand = {}
+suspects[i].assignedRoomName = nil
+end
+masterKillers = { "Miss Scarlet", "Colonel Mustard", "Mrs. White", "Mr. Green", "Mrs. Peacock", "Professor Plum" }
+masterWeapons = { "Candlestick", "Dagger", "Lead Pipe", "Revolver", "Rope", "Wrench" }
+masterRooms = { "Kitchen", "Ballroom", "Conservatory", "Dining Room", "Game Room", "Library", "Lounge", "Hall", "Study" }
+math.randomseed(playdate.getSecondsSinceEpoch())
+math.random() math.random()
+local winKillerIdx = math.random(1, #masterKillers)
+local winWeaponIdx = math.random(1, #masterWeapons)
+local winRoomIdx = math.random(1, #masterRooms)
+caseFile.killer = table.remove(masterKillers, winKillerIdx)
+caseFile.weapon = table.remove(masterWeapons, winWeaponIdx)
+caseFile.room = table.remove(masterRooms, winRoomIdx)
+local dealPool = {}
+for i = 1, #masterKillers do table.insert(dealPool, masterKillers[i]) end
+for i = 1, #masterWeapons do table.insert(dealPool, masterWeapons[i]) end
+for i = 1, #masterRooms do table.insert(dealPool, masterRooms[i]) end
 shuffleStrings(dealPool)
 local totalParticipants = 1 + #suspects
 for turn = 1, #dealPool do
@@ -283,6 +335,22 @@ playerY = selectedSpawn.y
 end
 -- Initialize the first loop parameters safely on compilation
 resetGameEngine()
+-- ==========================================================
+-- SYSTEM MENU INTEGRATION
+-- ==========================================================
+local menu = playdate.getSystemMenu()
+-- 1. Pause Option
+local pauseMenuItem, error = menu:addMenuItem("Pause Game", function()
+if gameState ~= "TITLE" and gameState ~= "GAME_OVER" and gameState ~= "PAUSE" then
+stateBeforePause = gameState
+gameState = "PAUSE"
+end
+end)
+-- 2. Restart Option
+local restartMenuItem, error = menu:addMenuItem("Restart Game", function()
+resetGameEngine()
+gameState = "TITLE"
+end)
 local function isWalkable(x, y)
 local points = {
 {x = x, y = y},
@@ -333,43 +401,24 @@ end
 return nil
 end
 local function handleDpadInput()
-if gameState == "TITLE" or gameState == "GAME_OVER" then
+if gameState == "TITLE" or gameState == "GAME_OVER" or gameState == "PAUSE" or gameState == "NOTEPAD" then
 return
 end
-if gameState == "NOTEPAD" then
-if playdate.buttonJustPressed(playdate.kButtonUp) then
-local startingIndex = selectedIndex
-repeat
-selectedIndex = selectedIndex - 1
-if selectedIndex < 1 then selectedIndex = #checklist end
-until not checklist[selectedIndex].isHeader or selectedIndex == startingIndex
-elseif playdate.buttonJustPressed(playdate.kButtonDown) then
-local startingIndex = selectedIndex
-repeat
-selectedIndex = selectedIndex + 1
-if selectedIndex > #checklist then selectedIndex = 1 end
-until not checklist[selectedIndex].isHeader or selectedIndex == startingIndex
-end
-if selectedIndex - scrollOffset > 7 then
-scrollOffset = selectedIndex - 7
-elseif selectedIndex - scrollOffset < 2 then
-scrollOffset = math.max(0, selectedIndex - 2)
-end
-elseif gameState == "ACCUSE_WEAPON" then
+if gameState == "ACCUSE_WEAPON" then
 if playdate.buttonJustPressed(playdate.kButtonUp) then
 accuseWeaponIndex = accuseWeaponIndex - 1
-if accuseWeaponIndex < 1 then accuseWeaponIndex = #masterWeaponList end
+if accuseWeaponIndex < 1 then accuseWeaponIndex = #dynamicWeapons end
 elseif playdate.buttonJustPressed(playdate.kButtonDown) then
 accuseWeaponIndex = accuseWeaponIndex + 1
-if accuseWeaponIndex > #masterWeaponList then accuseWeaponIndex = 1 end
+if accuseWeaponIndex > #dynamicWeapons then accuseWeaponIndex = 1 end
 end
 elseif gameState == "ACCUSE_ROOM" then
 if playdate.buttonJustPressed(playdate.kButtonUp) then
 accuseRoomIndex = accuseRoomIndex - 1
-if accuseRoomIndex < 1 then accuseRoomIndex = #masterRoomList end
+if accuseRoomIndex < 1 then accuseRoomIndex = #dynamicRooms end
 elseif playdate.buttonJustPressed(playdate.kButtonDown) then
 accuseRoomIndex = accuseRoomIndex + 1
-if accuseRoomIndex > #masterRoomList then accuseRoomIndex = 1 end
+if accuseRoomIndex > #dynamicRooms then accuseRoomIndex = 1 end
 end
 elseif gameState == "MAP" or gameState == "ROOM_VIEW" then
 local dx, dy = 0, 0
@@ -488,8 +537,9 @@ else
 gameState = "MAP"; currentRoom = nil
 end
 elseif currentRoom.name == "Study" then
-if math.abs(playerX - 224) <= 15 and math.abs(playerY - 136) <= 15 then
-playerX = 361; playerY = 204
+-- FIXED GATING: Only trigger transition if walking UP into the door
+if playdate.buttonIsPressed(playdate.kButtonUp) and math.abs(playerX - 233) <= 12 and math.abs(playerY - 138) <= 12 then
+playerX = 371; playerY = 210 + 16 -- Safely spawn inside away from door trigger
 else
 gameState = "MAP"; currentRoom = nil
 end
@@ -547,8 +597,9 @@ elseif math.abs(playerX - 354) <= (playerSpeed + 2) and math.abs(playerY - 309) 
 gameState = "MAP"; currentRoom = nil; playerX = 243 + 12; playerY = 274
 end
 elseif currentRoom.name == "Study" then
-if math.abs(playerX - 361) <= 15 and math.abs(playerY - 204) <= 15 then
-gameState = "MAP"; currentRoom = nil; playerX = 224; playerY = 136 + 16
+-- FIXED GATING: Only trigger transition if walking DOWN out of the room threshold
+if playdate.buttonIsPressed(playdate.kButtonDown) and math.abs(playerX - 371) <= 12 and math.abs(playerY - 210) <= 12 then
+gameState = "MAP"; currentRoom = nil; playerX = 233; playerY = 138 + 14 -- Safely step out down hallway
 end
 elseif currentRoom.name == "Lounge" then
 if math.abs(playerX - 660) <= 15 and math.abs(playerY - 215) <= (playerSpeed + 2) then
@@ -617,15 +668,70 @@ end
 local function handleCrankInput()
 if playdate.isCrankDocked() then
 if gameState == "MAP_FULL" then gameState = "MAP" end
+crankTicks = 0
+notepadCrankTicks = 0
 return
 end
-if gameState == "MAP" or gameState == "MAP_FULL" then
 local crankChange = playdate.getCrankChange()
-if crankChange > 2 then gameState = "MAP_FULL"
-elseif crankChange < -2 then gameState = "MAP" end
+-- 1. NOTEPAD STATE: Use crank to control list scrolling highlight (with clamped boundaries)
+if gameState == "NOTEPAD" then
+notepadCrankTicks = notepadCrankTicks + crankChange
+-- Turning forward rolls downstream (down the list)
+if notepadCrankTicks > NOTEPAD_CRANK_THRESHOLD then
+local nextIndex = selectedIndex
+local found = false
+-- Find the next non-header item down the list
+while nextIndex < #checklist do
+nextIndex = nextIndex + 1
+if not checklist[nextIndex].isHeader then
+found = true
+break
+end
+end
+if found then
+selectedIndex = nextIndex
+end
+notepadCrankTicks = 0
+-- Turning backward rolls upstream (up the list)
+elseif notepadCrankTicks < -NOTEPAD_CRANK_THRESHOLD then
+local prevIndex = selectedIndex
+local found = false
+-- Find the next non-header item up the list
+while prevIndex > 1 do
+prevIndex = prevIndex - 1
+if not checklist[prevIndex].isHeader then
+found = true
+break
+end
+end
+if found then
+selectedIndex = prevIndex
+end
+notepadCrankTicks = 0
+end
+-- Sync rendering scroll layout safely
+if selectedIndex - scrollOffset > 7 then
+scrollOffset = selectedIndex - 7
+elseif selectedIndex - scrollOffset < 2 then
+scrollOffset = math.max(0, selectedIndex - 2)
+end
+-- 2. MAP MODES: Use crank to cycle zoom maps
+elseif gameState == "MAP" or gameState == "MAP_FULL" then
+crankTicks = crankTicks + crankChange
+if crankTicks > CRANK_THRESHOLD then
+gameState = "MAP_FULL"
+crankTicks = 0
+elseif crankTicks < -CRANK_THRESHOLD then
+gameState = "MAP"
+crankTicks = 0
+end
 end
 end
 function playdate.BButtonDown()
+if gameState == "PAUSE" then
+gameState = stateBeforePause
+return
+end
 if gameState == "TITLE" or gameState == "GAME_OVER" then
 return
 end
@@ -669,10 +775,14 @@ else
 if gameState == "MAP" or gameState == "ROOM_VIEW" then
 stateBeforeNotepad = gameState
 gameState = "NOTEPAD"
+notepadCrankTicks = 0 -- clear historical ticks
 end
 end
 end
 function playdate.AButtonDown()
+if gameState == "PAUSE" then
+return
+end
 if gameState == "GAME_OVER" then
 resetGameEngine()
 gameState = "TITLE"
@@ -688,16 +798,21 @@ if currentItem and not currentItem.isHeader then
 currentItem.checked = not currentItem.checked
 end
 elseif gameState == "DIALOGUE" then
+if isCrossedOff(activeSpeaker) then
+return
+else
+populateDynamicLists()
 gameState = "ACCUSE_CONFIRM"
+end
 elseif gameState == "ACCUSE_CONFIRM" then
 accuseWeaponIndex = 1
 gameState = "ACCUSE_WEAPON"
 elseif gameState == "ACCUSE_WEAPON" then
-finalAccuseWeapon = masterWeaponList[accuseWeaponIndex]
+finalAccuseWeapon = dynamicWeapons[accuseWeaponIndex]
 accuseRoomIndex = 1
 gameState = "ACCUSE_ROOM"
 elseif gameState == "ACCUSE_ROOM" then
-finalAccuseRoom = masterRoomList[accuseRoomIndex]
+finalAccuseRoom = dynamicRooms[accuseRoomIndex]
 gameState = "ACCUSE_SUMMARY"
 elseif gameState == "REVEAL_ENVELOPE" then
 gameState = "GAME_OVER"
@@ -763,7 +878,6 @@ elseif playerTilesLeft == 0 then
 roomString = "OUT OF STEPS!"
 end
 local bottomHudText = string.format("%s | X: %i, Y: %i", roomString, playerX, playerY)
-gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
 gfx.drawText(bottomHudText, 10, SCREEN_HEIGHT - 18)
 gfx.setImageDrawMode(gfx.kDrawModeCopy)
 elseif gameState == "MAP_FULL" then
@@ -833,7 +947,6 @@ gfx.setColor(gfx.kColorBlack)
 gfx.fillRect(0, SCREEN_HEIGHT - 20, SCREEN_WIDTH, 20)
 local roomName = currentRoom and currentRoom.name or "Unknown"
 local debugText = string.format("%s | World: %i,%i | Room: %i,%i", roomName, playerX, playerY, localPlayerX, localPlayerY - 20)
-gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
 gfx.drawText(debugText, 6, SCREEN_HEIGHT - 18)
 gfx.setImageDrawMode(gfx.kDrawModeCopy)
 elseif gameState == "NOTEPAD" then
@@ -893,7 +1006,9 @@ gfx.drawText(activeSpeaker:upper(), 25, SCREEN_HEIGHT - 70)
 gfx.drawTextInRect(dialogueText, 25, SCREEN_HEIGHT - 52, SCREEN_WIDTH - 50, 35, 0, gfx.kTextAlignLeft)
 if math.floor(playdate.getElapsedTime() * 3) % 2 == 0 then
 gfx.drawText("(B) BACK", SCREEN_WIDTH - 375, SCREEN_HEIGHT - 35)
+if not isCrossedOff(activeSpeaker) then
 gfx.drawText("(A) ACCUSE", SCREEN_WIDTH - 110, SCREEN_HEIGHT - 35)
+end
 end
 elseif gameState == "ACCUSE_CONFIRM" then
 if currentRoom and currentRoom.img then currentRoom.img:draw(0, 20) end
@@ -919,84 +1034,16 @@ gfx.drawRect(30, 30, SCREEN_WIDTH - 60, SCREEN_HEIGHT - 60)
 gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
 gfx.drawText("SELECT MURDER WEAPON", 110, 40)
 gfx.drawLine(45, 58, 355, 58)
-for i = 1, #masterWeaponList do
+for i = 1, #dynamicWeapons do
 local currentY = 65 + ((i - 1) * 18)
 if i == accuseWeaponIndex then
-gfx.drawText("-> " .. masterWeaponList[i]:upper(), 130, currentY)
+gfx.drawText("-> " .. dynamicWeapons[i]:upper(), 130, currentY)
 else
-gfx.drawText(masterWeaponList[i], 150, currentY)
+gfx.drawText(dynamicWeapons[i], 150, currentY)
 end
 end
 gfx.drawText("(A) CONFIRM WEAPON", 45, SCREEN_HEIGHT - 52)
 gfx.drawText("(B) GO BACK", SCREEN_WIDTH - 130, SCREEN_HEIGHT - 52)
 gfx.setImageDrawMode(gfx.kDrawModeCopy)
-elseif gameState == "ACCUSE_ROOM" then
-if currentRoom and currentRoom.img then currentRoom.img:draw(0, 20) end
-gfx.setColor(gfx.kColorBlack)
-gfx.fillRect(30, 22, SCREEN_WIDTH - 60, SCREEN_HEIGHT - 44)
-gfx.setColor(gfx.kColorWhite)
-gfx.drawRect(30, 22, SCREEN_WIDTH - 60, SCREEN_HEIGHT - 44)
-gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
-gfx.drawText("SELECT CRIME SCENE", 110, 28)
-gfx.drawLine(45, 44, 355, 44)
-for i = 1, #masterRoomList do
-local currentY = 48 + ((i - 1) * 15)
-if i == accuseRoomIndex then
-gfx.drawText("-> " .. masterRoomList[i]:upper(), 110, currentY)
-else
-gfx.drawText(masterRoomList[i], 130, currentY)
-end
-end
-gfx.drawText("(A) CONFIRM ROOM", 45, SCREEN_HEIGHT - 42)
-gfx.drawText("(B) GO BACK", SCREEN_WIDTH - 130, SCREEN_HEIGHT - 42)
-gfx.setImageDrawMode(gfx.kDrawModeCopy)
-elseif gameState == "ACCUSE_SUMMARY" then
-if currentRoom and currentRoom.img then currentRoom.img:draw(0, 20) end
-gfx.setColor(gfx.kColorBlack)
-gfx.fillRect(20, 35, SCREEN_WIDTH - 40, SCREEN_HEIGHT - 70)
-gfx.setColor(gfx.kColorWhite)
-gfx.drawRect(20, 35, SCREEN_WIDTH - 40, SCREEN_HEIGHT - 70)
-gfx.drawRect(22, 37, SCREEN_WIDTH - 44, SCREEN_HEIGHT - 74)
-gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
-gfx.drawText("FINAL ACCUSATION", 105, 45)
-gfx.drawLine(40, 65, 360, 65)
-gfx.drawText("SUSPECT : " .. activeSpeaker:upper(), 60, 85)
-gfx.drawText("WEAPON : " .. finalAccuseWeapon:upper(), 60, 110)
-gfx.drawText("ROOM : " .. finalAccuseRoom:upper(), 60, 135)
-gfx.drawText("(A) ACCUSE!", 45, SCREEN_HEIGHT - 60)
-gfx.drawText("(B) GO BACK", SCREEN_WIDTH - 135, SCREEN_HEIGHT - 60)
-gfx.setImageDrawMode(gfx.kDrawModeCopy)
-elseif gameState == "REVEAL_ENVELOPE" then
-if currentRoom and currentRoom.img then
-currentRoom.img:draw(0, 20)
-elseif roomBackgrounds.mansion then
-roomBackgrounds.mansion:draw(-cameraX, -cameraY)
-end
-gfx.setColor(gfx.kColorBlack)
-gfx.fillRect(30, 25, SCREEN_WIDTH - 60, SCREEN_HEIGHT - 50)
-gfx.setColor(gfx.kColorWhite)
-gfx.drawRect(30, 25, SCREEN_WIDTH - 60, SCREEN_HEIGHT - 50)
-gfx.drawRect(32, 27, SCREEN_WIDTH - 64, SCREEN_HEIGHT - 54)
-gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
-gfx.drawText("TOP SECRET CASE FILE", 115, 38)
-gfx.drawLine(45, 56, 355, 56)
-gfx.drawText("KILLER : " .. caseFile.killer:upper(), 60, 75)
-gfx.drawText("WEAPON : " .. caseFile.weapon:upper(), 60, 105)
-gfx.drawText("ROOM : " .. caseFile.room:upper(), 60, 135)
-gfx.drawLine(45, 170, 355, 170)
-gfx.drawText("PRESS (A) TO CLOSE CASE ENVELOPE", 65, 185)
-gfx.setImageDrawMode(gfx.kDrawModeCopy)
-elseif gameState == "GAME_OVER" then
-if gameOverImage then
-gameOverImage:draw(0, 0)
-else
-gfx.setColor(gfx.kColorBlack)
-gfx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
-gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
-gfx.drawTextAligned("INVESTIGATION CONCLUDED", SCREEN_WIDTH / 2, 80, gfx.kTextAlignmentCenter)
-end
--- Draw solid black text centered precisely 50px from the bottom (240 - 50 = 190)
-gfx.setImageDrawMode(gfx.kDrawModeCopy)
-gfx.drawTextAligned("(A) Play Again", SCREEN_WIDTH / 5, 190, gfx.kTextAlignmentCenter)
 end
 end
