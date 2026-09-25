@@ -1,6 +1,6 @@
-name=Clue
+name=Investigation
 author=Ayla
 description=A 1-bit clue mystery game.
-bundleID=com.ayla.clue
+bundleID=com.ayla.investigation
 version=1.0.0
-
+imagePath=card
