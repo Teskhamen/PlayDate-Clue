@@ -7,7 +7,7 @@ local gfx <const> = playdate.graphics
 -- Simplified States & Variables
 local gameState = "TITLE" 
 local totalAccusationsLeft = 4
-local playerTilesLeft = 1000
+local playerTilesLeft = 100 -- FIXED: Limited starting pool to exactly 100 steps
 local pixelRemainder = 0       
 local currentRoom = nil
 
@@ -89,7 +89,7 @@ local roomBackgrounds = {
     studyMask        = gfx.image.new("images/Study_Mask")
 }
 
--- Definitive coordinate layout matching your 800x800 map dimensions
+-- Definitive coordinate layout matching your map dimensions
 local rooms = {
     { name = "Study",        x = 50,  y = 37,  w = 189, h = 96,  img = roomBackgrounds.study,        mask = roomBackgrounds.studyMask },
     { name = "Hall",         x = 326, y = 52,  w = 144, h = 165, img = roomBackgrounds.hall,         mask = roomBackgrounds.hallMask },
@@ -253,18 +253,19 @@ local function populateDynamicLists()
             end
         end
     end
-    
 -- Safety mechanism: if player crosses off absolute solution targets, always include at least the true answers
 if #dynamicKillers == 0 then table.insert(dynamicKillers, caseFile.killer) end
 if #dynamicWeapons == 0 then table.insert(dynamicWeapons, caseFile.weapon) end
 if #dynamicRooms == 0 then table.insert(dynamicRooms, caseFile.room) end
 end
+
+
 -- ==========================================================
 -- MASTER GAME ENGINE SYSTEM RESET INTERFACE
 -- ==========================================================
 local function resetGameEngine()
 totalAccusationsLeft = 4
-playerTilesLeft = 1000
+playerTilesLeft = 100 -- FIXED: Restores exactly 100 steps upon custom game engine reset
 pixelRemainder = 0
 currentRoom = nil
 selectedIndex = 2
@@ -273,8 +274,6 @@ activeSpeaker = ""
 dialogueText = ""
 crankTicks = 0
 notepadCrankTicks = 0
-
-
 checklist = createBlankNotepad()
 for i = 1, #suspects do
 suspects[i].notepad = createBlankNotepad()
@@ -393,6 +392,11 @@ end
 return true
 end
 local function checkRoomTransitions(px, py)
+if not currentRoom and math.abs(px - 233) <= 15 and math.abs(py - 138) <= 15 then
+for _, r in ipairs(rooms) do
+if r.name == "Study" then return r end
+end
+end
 for _, room in ipairs(rooms) do
 if px >= room.x and px <= (room.x + room.w) and py >= room.y and py <= (room.y + room.h) then
 return room
@@ -537,12 +541,7 @@ else
 gameState = "MAP"; currentRoom = nil
 end
 elseif currentRoom.name == "Study" then
--- FIXED GATING: Only trigger transition if walking UP into the door
-if playdate.buttonIsPressed(playdate.kButtonUp) and math.abs(playerX - 233) <= 12 and math.abs(playerY - 138) <= 12 then
-playerX = 371; playerY = 210 + 16 -- Safely spawn inside away from door trigger
-else
-gameState = "MAP"; currentRoom = nil
-end
+playerX = 371; playerY = 210 - 16
 elseif currentRoom.name == "Lounge" then
 if math.abs(playerX - 566) <= 15 and math.abs(playerY - 196) <= 15 then
 playerX = 660; playerY = 215 - 12
@@ -597,9 +596,8 @@ elseif math.abs(playerX - 354) <= (playerSpeed + 2) and math.abs(playerY - 309) 
 gameState = "MAP"; currentRoom = nil; playerX = 243 + 12; playerY = 274
 end
 elseif currentRoom.name == "Study" then
--- FIXED GATING: Only trigger transition if walking DOWN out of the room threshold
-if playdate.buttonIsPressed(playdate.kButtonDown) and math.abs(playerX - 371) <= 12 and math.abs(playerY - 210) <= 12 then
-gameState = "MAP"; currentRoom = nil; playerX = 233; playerY = 138 + 14 -- Safely step out down hallway
+if math.abs(playerX - 371) <= 15 and math.abs(playerY - 210) <= 15 then
+gameState = "MAP"; currentRoom = nil; playerX = 233; playerY = 138 + 16
 end
 elseif currentRoom.name == "Lounge" then
 if math.abs(playerX - 660) <= 15 and math.abs(playerY - 215) <= (playerSpeed + 2) then
@@ -1044,6 +1042,84 @@ end
 end
 gfx.drawText("(A) CONFIRM WEAPON", 45, SCREEN_HEIGHT - 52)
 gfx.drawText("(B) GO BACK", SCREEN_WIDTH - 130, SCREEN_HEIGHT - 52)
+gfx.setImageDrawMode(gfx.kDrawModeCopy)
+elseif gameState == "ACCUSE_ROOM" then
+if currentRoom and currentRoom.img then currentRoom.img:draw(0, 20) end
+gfx.setColor(gfx.kColorBlack)
+gfx.fillRect(30, 22, SCREEN_WIDTH - 60, SCREEN_HEIGHT - 44)
+gfx.setColor(gfx.kColorWhite)
+gfx.drawRect(30, 22, SCREEN_WIDTH - 60, SCREEN_HEIGHT - 44)
+gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
+gfx.drawText("SELECT CRIME SCENE", 110, 28)
+gfx.drawLine(45, 44, 355, 44)
+for i = 1, #dynamicRooms do
+local currentY = 48 + ((i - 1) * 15)
+if i == accuseRoomIndex then
+gfx.drawText("-> " .. dynamicRooms[i]:upper(), 110, currentY)
+else
+gfx.drawText(dynamicRooms[i], 130, currentY)
+end
+end
+gfx.drawText("(A) CONFIRM ROOM", 45, SCREEN_HEIGHT - 42)
+gfx.drawText("(B) GO BACK", SCREEN_WIDTH - 130, SCREEN_HEIGHT - 42)
+gfx.setImageDrawMode(gfx.kDrawModeCopy)
+elseif gameState == "ACCUSE_SUMMARY" then
+if currentRoom and currentRoom.img then currentRoom.img:draw(0, 20) end
+gfx.setColor(gfx.kColorBlack)
+gfx.fillRect(20, 35, SCREEN_WIDTH - 40, SCREEN_HEIGHT - 70)
+gfx.setColor(gfx.kColorWhite)
+gfx.drawRect(20, 35, SCREEN_WIDTH - 40, SCREEN_HEIGHT - 70)
+gfx.drawRect(22, 37, SCREEN_WIDTH - 44, SCREEN_HEIGHT - 74)
+gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
+gfx.drawText("FINAL ACCUSATION", 105, 45)
+gfx.drawLine(40, 65, 360, 65)
+gfx.drawText("SUSPECT : " .. activeSpeaker:upper(), 60, 85)
+gfx.drawText("WEAPON : " .. finalAccuseWeapon:upper(), 60, 110)
+gfx.drawText("ROOM : " .. finalAccuseRoom:upper(), 60, 135)
+gfx.drawText("(A) ACCUSE!", 45, SCREEN_HEIGHT - 60)
+gfx.drawText("(B) GO BACK", SCREEN_WIDTH - 135, SCREEN_HEIGHT - 60)
+gfx.setImageDrawMode(gfx.kDrawModeCopy)
+elseif gameState == "REVEAL_ENVELOPE" then
+if currentRoom and currentRoom.img then
+currentRoom.img:draw(0, 20)
+elseif roomBackgrounds.mansion then
+roomBackgrounds.mansion:draw(-cameraX, -cameraY)
+end
+gfx.setColor(gfx.kColorBlack)
+gfx.fillRect(30, 25, SCREEN_WIDTH - 60, SCREEN_HEIGHT - 50)
+gfx.setColor(gfx.kColorWhite)
+gfx.drawRect(30, 25, SCREEN_WIDTH - 60, SCREEN_HEIGHT - 50)
+gfx.drawRect(32, 27, SCREEN_WIDTH - 64, SCREEN_HEIGHT - 54)
+gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
+gfx.drawText("TOP SECRET CASE FILE", 115, 38)
+gfx.drawLine(45, 56, 355, 56)
+gfx.drawText("KILLER : " .. caseFile.killer:upper(), 60, 75)
+gfx.drawText("WEAPON : " .. caseFile.weapon:upper(), 60, 105)
+gfx.drawText("ROOM : " .. caseFile.room:upper(), 60, 135)
+gfx.drawLine(45, 170, 355, 170)
+gfx.drawText("PRESS (A) TO CLOSE CASE ENVELOPE", 65, 185)
+gfx.setImageDrawMode(gfx.kDrawModeCopy)
+elseif gameState == "GAME_OVER" then
+if gameOverImage then
+gameOverImage:draw(0, 0)
+else
+gfx.setColor(gfx.kColorBlack)
+gfx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
+gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
+gfx.drawTextAligned("INVESTIGATION CONCLUDED", SCREEN_WIDTH / 2, 80, gfx.kTextAlignmentCenter)
+end
+gfx.setImageDrawMode(gfx.kDrawModeCopy)
+gfx.drawTextAligned("(A) Play Again", SCREEN_WIDTH / 5, 190, gfx.kTextAlignmentCenter)
+elseif gameState == "PAUSE" then
+if pauseImage then
+pauseImage:draw(0, 0)
+else
+gfx.setColor(gfx.kColorBlack)
+gfx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
+gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
+gfx.drawTextAligned("GAME PAUSED", SCREEN_WIDTH / 2, 100, gfx.kTextAlignmentCenter)
+gfx.drawTextAligned("Press (B) to Resume", SCREEN_WIDTH / 2, 140, gfx.kTextAlignmentCenter)
+end
 gfx.setImageDrawMode(gfx.kDrawModeCopy)
 end
 end
