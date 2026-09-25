@@ -4,5 +4,3 @@ description=A 1-bit clue mystery game.
 bundleID=com.ayla.clue
 version=1.0.0
 
-pdxversion=30101
-buildtime=843678788

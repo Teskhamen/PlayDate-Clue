@@ -7,7 +7,7 @@ local gfx <const> = playdate.graphics
 -- Simplified States & Variables
 local gameState = "TITLE" 
 local totalAccusationsLeft = 4
-local playerTilesLeft = 10 
+local playerTilesLeft = 1000
 local pixelRemainder = 0       
 local currentRoom = nil
 
@@ -209,7 +209,7 @@ local masterRoomList = { "Kitchen", "Ballroom", "Conservatory", "Dining Room", "
 -- ==========================================================
 local function resetGameEngine()
     totalAccusationsLeft = 4
-    playerTilesLeft = 10
+    playerTilesLeft = 1000
     pixelRemainder = 0
     currentRoom = nil
     selectedIndex = 2
