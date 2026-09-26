@@ -7,7 +7,7 @@ local gfx <const> = playdate.graphics
 -- Simplified States & Variables
 local gameState = "TITLE" 
 local totalAccusationsLeft = 4
-local playerTilesLeft = 100 -- Pool limited to exactly 100 steps
+local playerTilesLeft = 1000 -- Pool limited to exactly 100 steps
 local pixelRemainder = 0       
 local currentRoom = nil
 
@@ -253,6 +253,7 @@ local function populateDynamicLists()
             if not row.checked then
                 if sortingMode == "KILLER" then table.insert(dynamicKillers, row.name)
                 elseif sortingMode == "WEAPON" then table.insert(dynamicWeapons, row.name)
+
 elseif sortingMode == "ROOM" then table.insert(dynamicRooms, row.name) end
 end
 end
@@ -261,14 +262,12 @@ if #dynamicKillers == 0 then table.insert(dynamicKillers, caseFile.killer) end
 if #dynamicWeapons == 0 then table.insert(dynamicWeapons, caseFile.weapon) end
 if #dynamicRooms == 0 then table.insert(dynamicRooms, caseFile.room) end
 end
-
-
 -- ==========================================================
 -- MASTER GAME ENGINE SYSTEM RESET INTERFACE
 -- ==========================================================
 local function resetGameEngine()
 totalAccusationsLeft = 4
-playerTilesLeft = 100
+playerTilesLeft = 1000
 pixelRemainder = 0
 currentRoom = nil
 selectedIndex = 2
@@ -645,7 +644,7 @@ end
 end
 if #unrevealedCards > 0 then
 local pickedCard = unrevealedCards[math.random(1, #unrevealedCards)]
-dialogueText = string.format("I can prove that it wasn't %s. Let me mark that on your checklist.", pickedCard:upper())
+dialogueText = string.format("I can prove that it wasn't %s.", pickedCard:upper())
 for _, humanRow in ipairs(checklist) do
 if humanRow.name == pickedCard then
 humanRow.checked = true
@@ -832,7 +831,7 @@ dialogueText = string.format("WRONG! Game Over. The mystery was %s with the %s i
 gameState = "DIALOGUE"
 playerTilesLeft = 0
 else
-dialogueText = string.format("INCORRECT ACCUSATION! That guess was wrong. You have %i attempts remaining.", totalAccusationsLeft)
+dialogueText = string.format("INCORRECT ACCUSATION! %i attempts remain.", totalAccusationsLeft)
 gameState = "DIALOGUE"
 end
 end
@@ -856,41 +855,55 @@ gfx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
 gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
 gfx.drawTextAligned("MANSION MURDER MYSTERY", SCREEN_WIDTH / 2, 80, gfx.kTextAlignmentCenter)
 end
+gfx.setImageDrawMode(gfx.kDrawModeFillBlack)
+gfx.drawTextAligned("Press (A) to start", SCREEN_WIDTH / 3, SCREEN_HEIGHT - 45, gfx.kTextAlignmentCenter)
 gfx.setImageDrawMode(gfx.kDrawModeCopy)
 elseif gameState == "TUTORIAL" then
--- FIXED: Uniform solid black layout window style matching request constraints
 gfx.setColor(gfx.kColorBlack)
 gfx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
 gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
--- Header (Centered, no background overlay block)
-gfx.drawTextAligned("TUTORIAL", SCREEN_WIDTH / 20, 16, gfx.kTextAlignmentCenter)
+-- Header (Centered, no background overlay block) [1]
+gfx.drawTextAligned("TUTORIAL", SCREEN_WIDTH / 2, 16, gfx.kTextAlignmentCenter)
 gfx.setColor(gfx.kColorWhite)
 gfx.fillRect(20, 36, SCREEN_WIDTH - 40, 1)
--- Scrolling text layout viewport boundary masks (Pushed context lower)
+-- Scrolling text layout viewport boundary masks (Pushed context lower) [1]
 gfx.setClipRect(20, 44, SCREEN_WIDTH - 40, 144)
 local drawY = 48 - tutorialScrollY
--- Body Content strings (Cleaned of asterisks to eliminate bad symbol boxes)
-gfx.drawText("MISSION OBJECTIVE:", 24, drawY)
-gfx.drawText("Find the hidden combination of Killer, Weapon,", 24, drawY + 18)
-gfx.drawText("and Room sealed inside the secret envelope.", 24, drawY + 34)
-gfx.drawText("STEP BUDGET:", 24, drawY + 64)
-gfx.drawText("You begin with 100 steps. Moving subtracts steps.", 24, drawY + 82)
-gfx.drawText("If steps hit 0 before you solve it, you lose!", 24, drawY + 98)
-gfx.drawText("INVESTIGATION CONTROLS:", 24, drawY + 128)
-gfx.drawText("• D-Pad: Move character through corridors.", 24, drawY + 146)
-gfx.drawText("• Crank: Turn crank to scroll the text logs.", 24, drawY + 162)
-gfx.drawText("• (B) Button: Open/Close your Notepad log.", 24, drawY + 178)
-gfx.drawText("• (A) Button: Confirm choices or accuse targets.", 24, drawY + 194)
-gfx.drawText("DETECTION TIPS:", 24, drawY + 224)
-gfx.drawText("Walk up to suspects inside rooms. They will show", 24, drawY + 242)
-gfx.drawText("you clues to automatically cross entries off.", 24, drawY + 258)
-gfx.clearClipRect()
--- Footer Prompt (Uniform background, no blocking box overlays)
+local wrapW = SCREEN_WIDTH - 64 -- Safe wrapping width preventing overflow
+-- FIXED: Body Content items now use drawTextInRect with auto-wrap boundaries [1]
+-- MISSION OBJECTIVE SECTION
+        gfx.drawText("MISSION OBJECTIVE:", 24, drawY)
+        gfx.drawText("Find the hidden combination of Killer, Weapon,", 24, drawY + 18)
+        gfx.drawText("and Room sealed inside the secret envelope.", 24, drawY + 34)
+        
+        -- STEP BUDGET SECTION
+        gfx.drawText("STEP BUDGET:", 24, drawY + 68)
+        gfx.drawText("You begin with 1000 steps. Moving subtracts", 24, drawY + 86)
+        gfx.drawText("steps from your pool automatically.", 24, drawY + 102)
+        gfx.drawText("If steps hit 0 before you solve it, you lose!", 24, drawY + 118)
+        
+        -- INVESTIGATION CONTROLS SECTION
+        gfx.drawText("INVESTIGATION CONTROLS:", 24, drawY + 152)
+        gfx.drawText("- D-Pad: Move character through corridors.", 24, drawY + 170)
+        gfx.drawText("- Crank: Turn crank to open the Full Map", 24, drawY + 186)
+        gfx.drawText("  and scroll through the Notebook checklist.", 24, drawY + 202)
+        gfx.drawText("- (B) Button: Open/Close your Notepad log.", 24, drawY + 218)
+        gfx.drawText("- (A) Button: Confirm choices or accuse.", 24, drawY + 234)
+       
+        -- DETECTION TIPS SECTION
+        gfx.drawText("DETECTION TIPS:", 24, drawY + 268)
+        gfx.drawText("Walk up to suspects inside rooms. They will", 24, drawY + 286)
+        gfx.drawText("show you structural clues to automatically", 24, drawY + 302)
+        gfx.drawText("cross proven false entries off your notepad.", 24, drawY + 318)
+        
+        gfx.clearClipRect()
+       
+        -- Footer Prompt (Uniform background, no blocking box overlays) [1]
 gfx.fillRect(20, 194, SCREEN_WIDTH - 40, 1)
 if math.floor(playdate.getElapsedTime() * 3) % 2 == 0 then
-gfx.drawTextAligned("PRESS (A) TO START", SCREEN_WIDTH / 2, 206, gfx.kTextAlignmentCenter)
+gfx.drawTextAligned("PRESS (A) TO START", SCREEN_WIDTH / 3, 206, gfx.kTextAlignmentCenter)
 end
--- Dithered side layout vertical tracking scroll thumb indicator bar
+-- Dithered side layout vertical tracking scroll thumb indicator bar [1]
 local scrollPercentage = tutorialScrollY / tutorialMaxScroll
 local barY = 44 + (scrollPercentage * 125)
 gfx.fillRect(SCREEN_WIDTH - 16, barY, 3, 14)
@@ -934,14 +947,14 @@ local targetX = centeredX + (percentX * boardWidth) - (playerSize / 2)
 local targetY = centeredY + (percentY * boardHeight) - (playerSize / 2)
 if math.floor(playdate.getElapsedTime() * 4) % 2 == 0 then
 gfx.setColor(gfx.kColorWhite)
-gfx.fillEllipseInRect(targetX, targetY, playerSize, playerSize)
+gfx.fillEllipseInRect(targetX, targetY, playerSize / 2, playerSize / 2)
 gfx.setColor(gfx.kColorBlack)
 gfx.drawEllipseInRect(targetX - 2, targetY - 2, playerSize + 4, playerSize + 4)
 else
 gfx.setColor(gfx.kColorBlack)
-gfx.fillEllipseInRect(targetX, targetY, playerSize, playerSize)
+gfx.fillEllipseInRect(targetX, targetY, playerSize / 2, playerSize / 2)
 gfx.setColor(gfx.kColorWhite)
-gfx.drawEllipseInRect(targetX, targetY, playerSize, playerSize)
+gfx.drawEllipseInRect(targetX, targetY, playerSize / 2, playerSize / 2)
 end
 end
 elseif gameState == "ROOM_VIEW" then
@@ -1064,8 +1077,8 @@ gfx.drawText("CRITICAL ACCUSATION PROMPT", 100, 55)
 gfx.drawLine(40, 75, 360, 75)
 local linesText = string.format("Are you absolutely sure you want to formally accuse %s of committing the crime?", activeSpeaker:upper())
 gfx.drawTextInRect(linesText, 40, 95, SCREEN_WIDTH - 80, 50, 0, gfx.kTextAlignCenter)
-gfx.drawText("(A) CONFIRM SUSPECT", SCREEN_WIDTH - 375, SCREEN_HEIGHT - 70)
-gfx.drawText("(B) CANCEL", SCREEN_WIDTH - 195, SCREEN_HEIGHT - 70)
+gfx.drawText("(A) CONFIRM SUSPECT", SCREEN_WIDTH - 200, SCREEN_HEIGHT - 70)
+gfx.drawText("(B) CANCEL", SCREEN_WIDTH - 360, SCREEN_HEIGHT - 70)
 gfx.setImageDrawMode(gfx.kDrawModeCopy)
 elseif gameState == "ACCUSE_WEAPON" then
 if currentRoom and currentRoom.img then currentRoom.img:draw(0, 20) end
@@ -1084,8 +1097,8 @@ else
 gfx.drawText(dynamicWeapons[i], 150, currentY)
 end
 end
-gfx.drawText("(A) CONFIRM WEAPON", 45, SCREEN_HEIGHT - 52)
-gfx.drawText("(B) GO BACK", SCREEN_WIDTH - 130, SCREEN_HEIGHT - 52)
+gfx.drawText("(A) CONFIRM WEAPON", SCREEN_WIDTH - 205, SCREEN_HEIGHT - 52)
+gfx.drawText("(B) GO BACK", SCREEN_WIDTH - 355, SCREEN_HEIGHT - 52)
 gfx.setImageDrawMode(gfx.kDrawModeCopy)
 elseif gameState == "ACCUSE_ROOM" then
 if currentRoom and currentRoom.img then currentRoom.img:draw(0, 20) end
@@ -1104,8 +1117,8 @@ else
 gfx.drawText(dynamicRooms[i], 130, currentY)
 end
 end
-gfx.drawText("(A) CONFIRM ROOM", 45, SCREEN_HEIGHT - 42)
-gfx.drawText("(B) GO BACK", SCREEN_WIDTH - 130, SCREEN_HEIGHT - 42)
+gfx.drawText("(A) CONFIRM ROOM", SCREEN_WIDTH - 185, SCREEN_HEIGHT - 42)
+gfx.drawText("(B) GO BACK", SCREEN_WIDTH - 355, SCREEN_HEIGHT - 42)
 gfx.setImageDrawMode(gfx.kDrawModeCopy)
 elseif gameState == "ACCUSE_SUMMARY" then
 if currentRoom and currentRoom.img then currentRoom.img:draw(0, 20) end
@@ -1120,8 +1133,8 @@ gfx.drawLine(40, 65, 360, 65)
 gfx.drawText("SUSPECT : " .. activeSpeaker:upper(), 60, 85)
 gfx.drawText("WEAPON : " .. finalAccuseWeapon:upper(), 60, 110)
 gfx.drawText("ROOM : " .. finalAccuseRoom:upper(), 60, 135)
-gfx.drawText("(A) ACCUSE!", 45, SCREEN_HEIGHT - 60)
-gfx.drawText("(B) GO BACK", SCREEN_WIDTH - 135, SCREEN_HEIGHT - 60)
+gfx.drawText("(A) ACCUSE!", SCREEN_WIDTH - 135, SCREEN_HEIGHT - 60)
+gfx.drawText("(B) GO BACK", SCREEN_WIDTH - 350, SCREEN_HEIGHT - 60)
 gfx.setImageDrawMode(gfx.kDrawModeCopy)
 elseif gameState == "REVEAL_ENVELOPE" then
 if currentRoom and currentRoom.img then
@@ -1157,6 +1170,8 @@ gfx.drawTextAligned("(A) Play Again", SCREEN_WIDTH / 5, 190, gfx.kTextAlignmentC
 elseif gameState == "PAUSE" then
 if pauseImage then
 pauseImage:draw(0, 0)
+gfx.drawTextAligned("Press (B) to Resume", SCREEN_WIDTH / 3.3, SCREEN_HEIGHT - 45, gfx.kTextAlignmentCenter)
+
 else
 gfx.setColor(gfx.kColorBlack)
 gfx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
