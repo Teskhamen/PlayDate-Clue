@@ -48,8 +48,11 @@ local gameMusic, gameMusicErr = playdate.sound.fileplayer.new("audio/game music"
 if gameMusicErr then print("Audio Loading Alert (Game Theme): " .. tostring(gameMusicErr)) end
 
 -- NEW: Load the short escape sound clip as a low-latency sample player
-fleeSound, fleeSoundErr = playdate.sound.sampleplayer.new("audio/escape")
+local fleeSound, fleeSoundErr = playdate.sound.sampleplayer.new("audio/escape")
 if fleeSoundErr then print("Audio Loading Alert (Escape Sound): " .. tostring(fleeSoundErr)) end
+-- NEW: Load the scroll audio track as a sample player
+local scrollSound, scrollSoundErr = playdate.sound.sampleplayer.new("audio/scroll_click")
+if scrollSoundErr then print("Audio Loading Alert (Scroll Sound): " .. tostring(scrollSoundErr)) end
 
 -- Load your mask layout safely
 local maskImage = gfx.image.new("images/mask_map")
@@ -420,17 +423,63 @@ end
 return nil
 end
 local function handleDpadInput()
-if gameState == "TITLE" or gameState == "GAME_OVER" or gameState == "PAUSE" or gameState == "NOTEPAD" then
-return
-end
-if gameState == "TUTORIAL" then
-if playdate.buttonIsPressed(playdate.kButtonUp) then
-tutorialScrollY = math.max(0, tutorialScrollY - 4)
-elseif playdate.buttonIsPressed(playdate.kButtonDown) then
-tutorialScrollY = math.min(tutorialMaxScroll, tutorialScrollY + 4)
-end
-return
-end
+    -- 1. MASTER SAFETY GUARD (Excludes NOTEPAD from being blocked!)
+    if gameState == "TITLE" or gameState == "GAME_OVER" or gameState == "PAUSE" then
+        return
+    end
+
+    -- 2. NEW: FIXED D-PAD NAVIGATION FOR THE DETECTIVE NOTEPAD STATE
+    if gameState == "NOTEPAD" then
+        if playdate.buttonJustPressed(playdate.kButtonUp) then
+            local prevIndex = selectedIndex
+            local found = false
+            while prevIndex > 1 do
+                prevIndex = prevIndex - 1
+                if not checklist[prevIndex].isHeader then
+                    found = true
+                    break
+                end
+            end
+            if found then 
+                selectedIndex = prevIndex 
+                if scrollSound then scrollSound:play() end
+            end
+        elseif playdate.buttonJustPressed(playdate.kButtonDown) then
+            local nextIndex = selectedIndex
+            local found = false
+            while nextIndex < #checklist do
+                nextIndex = nextIndex + 1
+                if not checklist[nextIndex].isHeader then
+                    found = true
+                    break
+                end
+            end
+            if found then 
+                selectedIndex = nextIndex 
+                if scrollSound then scrollSound:play() end
+            end
+        end
+
+        -- Handle viewport window scrolling centering offsets for D-Pad rows
+        if selectedIndex - scrollOffset > 7 then
+            scrollOffset = selectedIndex - 7
+        elseif selectedIndex - scrollOffset < 2 then
+            scrollOffset = math.max(0, selectedIndex - 2)
+        end
+        return -- Handled notepad state, stop processing further character walking logic
+    end
+
+    -- 3. EXISTING TUTORIAL HANDLING
+    if gameState == "TUTORIAL" then
+        if playdate.buttonIsPressed(playdate.kButtonUp) then
+            tutorialScrollY = math.max(0, tutorialScrollY - 4)
+        elseif playdate.buttonIsPressed(playdate.kButtonDown) then
+            tutorialScrollY = math.min(tutorialMaxScroll, tutorialScrollY + 4)
+        end
+        return
+    end
+    
+    -- ... [The rest of your handleDpadInput continues into accuse choices and walking maps below]
 if gameState == "ACCUSE_WEAPON" then
 if playdate.buttonJustPressed(playdate.kButtonUp) then
 accuseWeaponIndex = accuseWeaponIndex - 1
@@ -755,7 +804,10 @@ function playdate.BButtonDown()
         for i = 1, #suspects do
             if suspects[i].name == activeSpeaker then shiftingSuspect = suspects[i]; break end
         end
-        if shiftingSuspect then
+        
+        -- FIXED SOUND BOUNDARY GUARD: Only move them and play the escape sound 
+        -- if they are actually still physically assigned to the player's current room!
+        if shiftingSuspect and currentRoom and shiftingSuspect.assignedRoomName == currentRoom.name then
             local emptyRooms = {}
             for r = 1, #rooms do
                 local roomName = rooms[r].name
@@ -772,10 +824,12 @@ function playdate.BButtonDown()
                 shiftingSuspect.worldX = chosenRoom.x + offset.x
                 shiftingSuspect.worldY = chosenRoom.y + offset.y
                 
-                -- NEW: Trigger your custom escape audio cue here!
+                -- Only plays audio if they hadn't vanished yet!
                 if fleeSound then fleeSound:play() end
             end
         end
+        
+        -- Smoothly close the text screen without double-playing audio
         gameState = "ROOM_VIEW"
         activeSpeaker = ""
         dialogueText = ""
@@ -824,13 +878,21 @@ local currentItem = checklist[selectedIndex]
 if currentItem and not currentItem.isHeader then
 currentItem.checked = not currentItem.checked
 end
-elseif gameState == "DIALOGUE" then
-if isCrossedOff(activeSpeaker) then
-return
-else
-populateDynamicLists()
-gameState = "ACCUSE_CONFIRM"
-end
+    elseif gameState == "DIALOGUE" then
+        -- LOOPHOLE EXCLUSION GUARD: Extract active suspect reference data
+        local targetedSuspect = nil
+        for i = 1, #suspects do
+            if suspects[i].name == activeSpeaker then targetedSuspect = suspects[i]; break end
+        end
+        
+        -- COMPLETE INPUT BLOCK: Refuse accusation if the suspect is proven innocent 
+        -- OR if they have physically fled the room (their assigned room no longer matches currentRoom)!
+        if isCrossedOff(activeSpeaker) or (targetedSuspect and currentRoom and targetedSuspect.assignedRoomName ~= currentRoom.name) then
+            return -- Completely ignores the A button press!
+        else
+            populateDynamicLists()
+            gameState = "ACCUSE_CONFIRM"
+        end
 elseif gameState == "ACCUSE_CONFIRM" then
 accuseWeaponIndex = 1
 gameState = "ACCUSE_WEAPON"
@@ -843,24 +905,52 @@ finalAccuseRoom = dynamicRooms[accuseRoomIndex]
 gameState = "ACCUSE_SUMMARY"
 elseif gameState == "REVEAL_ENVELOPE" then
 gameState = "GAME_OVER"
-elseif gameState == "ACCUSE_SUMMARY" then
-if activeSpeaker == caseFile.killer and finalAccuseWeapon == caseFile.weapon and finalAccuseRoom == caseFile.room then
-dialogueText = "CORRECT! You solved the case! You found the true killer, weapon, and crime scene."
-gameState = "DIALOGUE"
-totalAccusationsLeft = 0
-else
-totalAccusationsLeft = totalAccusationsLeft - 1
-if totalAccusationsLeft <= 0 then
-dialogueText = string.format("WRONG! Game Over. The mystery was %s with the %s in the %s.", caseFile.killer:upper(), caseFile.weapon:upper(), caseFile.room:upper())
-gameState = "DIALOGUE"
-playerTilesLeft = 0
-else
-dialogueText = string.format("INCORRECT ACCUSATION! %i attempts remain.", totalAccusationsLeft)
-gameState = "DIALOGUE"
-end
-end
-end
-end
+    elseif gameState == "ACCUSE_SUMMARY" then
+        if activeSpeaker == caseFile.killer and finalAccuseWeapon == caseFile.weapon and finalAccuseRoom == caseFile.room then
+            dialogueText = "CORRECT! You solved the case! You found the true killer, weapon, and crime scene."
+            gameState = "DIALOGUE"
+            totalAccusationsLeft = 0
+        else
+            totalAccusationsLeft = totalAccusationsLeft - 1
+            
+            -- NEW: Instantly force the falsely accused suspect to vanish to another room
+            local shiftingSuspect = nil
+            for i = 1, #suspects do
+                if suspects[i].name == activeSpeaker then shiftingSuspect = suspects[i]; break end
+            end
+            if shiftingSuspect then
+                local emptyRooms = {}
+                for r = 1, #rooms do
+                    local roomName = rooms[r].name
+                    local isOccupied = false
+                    for s = 1, #suspects do
+                        if suspects[s].assignedRoomName == roomName then isOccupied = true; break end
+                    end
+                    if not isOccupied then table.insert(emptyRooms, rooms[r]) end
+                end
+                if #emptyRooms > 0 then
+                    local chosenRoom = emptyRooms[math.random(1, #emptyRooms)]
+                    shiftingSuspect.assignedRoomName = chosenRoom.name
+                    local offset = innerRoomSafeSpots[chosenRoom.name] or { x = 200, y = 100 }
+                    shiftingSuspect.worldX = chosenRoom.x + offset.x
+                    shiftingSuspect.worldY = chosenRoom.y + offset.y
+                    
+                    -- Play your escape audio clip to signal they left
+                    if fleeSound then fleeSound:play() end
+                end
+            end
+
+            if totalAccusationsLeft <= 0 then
+                dialogueText = string.format("WRONG! Game Over. The mystery was %s with the %s in the %s.", caseFile.killer:upper(), caseFile.weapon:upper(), caseFile.room:upper())
+                gameState = "DIALOGUE"
+                playerTilesLeft = 0
+            else
+                dialogueText = string.format("INCORRECT ACCUSATION! %i attempts remain.", totalAccusationsLeft)
+                gameState = "DIALOGUE"
+            end
+        end -- <--- Closes your active (activeSpeaker == caseFile.killer) check logic
+    end -- <--- Closes your active (gameState == "ACCUSE_SUMMARY") check logic
+end -- <--- Closes the master function playdate.AButtonDown() loop block cleanly
 -- Set scale factor once globally
 playdate.display.setScale(1)
 -- ==========================================================
@@ -1052,41 +1142,50 @@ gfx.drawText(item.name, 65, currentY)
 end
 end
 end
-elseif gameState == "DIALOGUE" then
-if currentRoom and currentRoom.img then
-currentRoom.img:draw(0, 20)
-end
-if currentRoom then
-for i = 1, #suspects do
-local suspect = suspects[i]
-if suspect.assignedRoomName == currentRoom.name then
-local localSuspectX = suspect.worldX - currentRoom.x
-local localSuspectY = (suspect.worldY - currentRoom.y) + 20
-if suspect.img then suspect.img:draw(localSuspectX, localSuspectY) end
-end
-end
-end
-local localPlayerX = 200
-local localPlayerY = 120
-if currentRoom then
-localPlayerX = playerX - currentRoom.x
-localPlayerY = (playerY - currentRoom.y) + 20
-end
-if playerSpriteImage then playerSpriteImage:draw(localPlayerX, localPlayerY) end
-gfx.setImageDrawMode(gfx.kDrawModeCopy)
-gfx.setColor(gfx.kColorWhite)
-gfx.fillRect(15, SCREEN_HEIGHT - 75, SCREEN_WIDTH - 30, 60)
-gfx.setColor(gfx.kColorBlack)
-gfx.drawRect(15, SCREEN_HEIGHT - 75, SCREEN_WIDTH - 30, 60)
-gfx.drawRect(17, SCREEN_HEIGHT - 73, SCREEN_WIDTH - 34, 56)
-gfx.drawText(activeSpeaker:upper(), 25, SCREEN_HEIGHT - 70)
-gfx.drawTextInRect(dialogueText, 25, SCREEN_HEIGHT - 52, SCREEN_WIDTH - 50, 35, 0, gfx.kTextAlignLeft)
-if math.floor(playdate.getElapsedTime() * 3) % 2 == 0 then
-gfx.drawText("(B) BACK", SCREEN_WIDTH - 375, SCREEN_HEIGHT - 35)
-if not isCrossedOff(activeSpeaker) then
-gfx.drawText("(A) ACCUSE", SCREEN_WIDTH - 110, SCREEN_HEIGHT - 35)
-end
-end
+    elseif gameState == "DIALOGUE" then
+        if currentRoom and currentRoom.img then
+            currentRoom.img:draw(0, 20)
+        end
+        if currentRoom then
+            for i = 1, #suspects do
+                local suspect = suspects[i]
+                if suspect.assignedRoomName == currentRoom.name then
+                    local localSuspectX = suspect.worldX - currentRoom.x
+                    local localSuspectY = (suspect.worldY - currentRoom.y) + 20
+                    if suspect.img then suspect.img:draw(localSuspectX, localSuspectY) end
+                end
+            end
+        end
+        local localPlayerX = 200
+        local localPlayerY = 120
+        if currentRoom then
+            localPlayerX = playerX - currentRoom.x
+            localPlayerY = (playerY - currentRoom.y) + 20
+        end
+        if playerSpriteImage then playerSpriteImage:draw(localPlayerX, localPlayerY) end
+        gfx.setImageDrawMode(gfx.kDrawModeCopy)
+        gfx.setColor(gfx.kColorWhite)
+        gfx.fillRect(15, SCREEN_HEIGHT - 75, SCREEN_WIDTH - 30, 60)
+        gfx.setColor(gfx.kColorBlack)
+        gfx.drawRect(15, SCREEN_HEIGHT - 75, SCREEN_WIDTH - 30, 60)
+        gfx.drawRect(17, SCREEN_HEIGHT - 73, SCREEN_WIDTH - 34, 56)
+        gfx.drawText(activeSpeaker:upper(), 25, SCREEN_HEIGHT - 70)
+        gfx.drawTextInRect(dialogueText, 25, SCREEN_HEIGHT - 52, SCREEN_WIDTH - 50, 35, 0, gfx.kTextAlignLeft)
+        
+        if math.floor(playdate.getElapsedTime() * 3) % 2 == 0 then
+            gfx.drawText("(B) BACK", SCREEN_WIDTH - 375, SCREEN_HEIGHT - 35)
+            
+            -- Fetch active suspect position reference for prompt evaluation
+            local activeRef = nil
+            for i = 1, #suspects do
+                if suspects[i].name == activeSpeaker then activeRef = suspects[i]; break end
+            end
+            
+            -- ANTI-FARMING HUD FIX: Only display the prompt if the suspect is still in this room!
+            if not isCrossedOff(activeSpeaker) and (activeRef and currentRoom and activeRef.assignedRoomName == currentRoom.name) then
+                gfx.drawText("(A) ACCUSE", SCREEN_WIDTH - 110, SCREEN_HEIGHT - 35)
+            end
+        end
 elseif gameState == "ACCUSE_CONFIRM" then
 if currentRoom and currentRoom.img then currentRoom.img:draw(0, 20) end
 gfx.setColor(gfx.kColorBlack)
