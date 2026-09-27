@@ -39,7 +39,7 @@ local dynamicWeapons = {}
 local dynamicRooms   = {}
 
 -- ==========================================================
--- MUSIC & SOUND AUDIO STORAGE CONFIGURATION
+-- MUSIC AUDIO STORAGE CONFIGURATION
 -- ==========================================================
 local titleMusic, titleMusicErr = playdate.sound.fileplayer.new("audio/intro music")
 if titleMusicErr then print("Audio Loading Alert (Intro Theme): " .. tostring(titleMusicErr)) end
@@ -47,12 +47,8 @@ if titleMusicErr then print("Audio Loading Alert (Intro Theme): " .. tostring(ti
 local gameMusic, gameMusicErr = playdate.sound.fileplayer.new("audio/game music")
 if gameMusicErr then print("Audio Loading Alert (Game Theme): " .. tostring(gameMusicErr)) end
 
--- Load short scroll sample effect as a sampleplayer for instant, low-latency playback
-local scrollSound, scrollSoundErr = playdate.sound.sampleplayer.new("audio/scroll_click")
-if scrollSoundErr then print("Audio Loading Alert (Scroll Sound): " .. tostring(scrollSoundErr)) end
-
--- Load suspect fleeing/escape sound clip safely
-local fleeSound, fleeSoundErr = playdate.sound.sampleplayer.new("audio/escape")
+-- NEW: Load the short escape sound clip as a low-latency sample player
+fleeSound, fleeSoundErr = playdate.sound.sampleplayer.new("audio/escape")
 if fleeSoundErr then print("Audio Loading Alert (Escape Sound): " .. tostring(fleeSoundErr)) end
 
 -- Load your mask layout safely
@@ -243,24 +239,26 @@ local playerSize = 12
 local playerSpeed = 3          
 local cameraX = 0
 local cameraY = 0
-local selectedIndex = 2
+
+local selectedIndex = 2 
 local scrollOffset = 0
 local stateBeforeNotepad = "MAP"
 local activeSpeaker = ""
 local dialogueText = ""
+
 local accuseWeaponIndex = 1
 local accuseRoomIndex = 1
 local finalAccuseWeapon = ""
 local finalAccuseRoom = ""
+
 -- Helper function to generate options remaining on notebook checklist
 local function populateDynamicLists()
-dynamicKillers = {}
-dynamicWeapons = {}
-dynamicRooms = {}
-
-
-local sortingMode = "NONE"
-for _, row in ipairs(checklist) do
+    dynamicKillers = {}
+    dynamicWeapons = {}
+    dynamicRooms   = {}
+    
+    local sortingMode = "NONE"
+    for _, row in ipairs(checklist) do
 if row.isHeader then
 if string.find(row.category, "KILLERS") then sortingMode = "KILLER"
 elseif string.find(row.category, "WEAPONS") then sortingMode = "WEAPON"
@@ -277,6 +275,8 @@ if #dynamicKillers == 0 then table.insert(dynamicKillers, caseFile.killer) end
 if #dynamicWeapons == 0 then table.insert(dynamicWeapons, caseFile.weapon) end
 if #dynamicRooms == 0 then table.insert(dynamicRooms, caseFile.room) end
 end
+
+
 -- ==========================================================
 -- MASTER GAME ENGINE SYSTEM RESET INTERFACE
 -- ==========================================================
@@ -420,46 +420,7 @@ end
 return nil
 end
 local function handleDpadInput()
--- D-PAD MOVEMENT FOR THE NOTEPAD CHECKLIST STATE
-if gameState == "NOTEPAD" then
-if playdate.buttonJustPressed(playdate.kButtonUp) then
-local prevIndex = selectedIndex
-local found = false
-while prevIndex > 1 do
-prevIndex = prevIndex - 1
-if not checklist[prevIndex].isHeader then
-found = true
-break
-end
-end
-if found then
-selectedIndex = prevIndex
-if scrollSound then scrollSound:play() end
-end
-elseif playdate.buttonJustPressed(playdate.kButtonDown) then
-local nextIndex = selectedIndex
-local found = false
-while nextIndex < #checklist do
-nextIndex = nextIndex + 1
-if not checklist[nextIndex].isHeader then
-found = true
-break
-end
-end
-if found then
-selectedIndex = nextIndex
-if scrollSound then scrollSound:play() end
-end
-end
--- Handle layout scroll offsets for D-Pad inputs
-if selectedIndex - scrollOffset > 7 then
-scrollOffset = selectedIndex - 7
-elseif selectedIndex - scrollOffset < 2 then
-scrollOffset = math.max(0, selectedIndex - 2)
-end
-return
-end
-if gameState == "TITLE" or gameState == "GAME_OVER" or gameState == "PAUSE" then
+if gameState == "TITLE" or gameState == "GAME_OVER" or gameState == "PAUSE" or gameState == "NOTEPAD" then
 return
 end
 if gameState == "TUTORIAL" then
@@ -620,7 +581,6 @@ gameState = "MAP"; currentRoom = nil
 end
 end
 end
-end
 elseif gameState == "ROOM_VIEW" and currentRoom then
 if currentRoom.name == "Dining Room" then
 if math.abs(playerX - 638) <= playerSpeed and math.abs(playerY - 403) <= 15 then
@@ -716,6 +676,7 @@ end
 end
 end
 end
+end
 cameraX = playerX - (SCREEN_WIDTH / 2) + (playerSize / 2)
 if cameraX < 0 then cameraX = 0
 elseif cameraX > (MAP_WIDTH - SCREEN_WIDTH) then cameraX = MAP_WIDTH - SCREEN_WIDTH end
@@ -750,10 +711,7 @@ found = true
 break
 end
 end
-if found then
-selectedIndex = nextIndex
-if scrollSound then scrollSound:play() end
-end
+if found then selectedIndex = nextIndex end
 notepadCrankTicks = 0
 elseif notepadCrankTicks < -NOTEPAD_CRANK_THRESHOLD then
 local prevIndex = selectedIndex
@@ -765,10 +723,7 @@ found = true
 break
 end
 end
-if found then
-selectedIndex = prevIndex
-if scrollSound then scrollSound:play() end
-end
+if found then selectedIndex = prevIndex end
 notepadCrankTicks = 0
 end
 if selectedIndex - scrollOffset > 7 then
@@ -788,41 +743,42 @@ end
 end
 end
 function playdate.BButtonDown()
-if gameState == "PAUSE" then
-gameState = stateBeforePause
-return
-end
-if gameState == "TITLE" or gameState == "TUTORIAL" or gameState == "GAME_OVER" then
-return
-end
-if gameState == "DIALOGUE" then
-local shiftingSuspect = nil
-for i = 1, #suspects do
-if suspects[i].name == activeSpeaker then shiftingSuspect = suspects[i]; break end
-end
-if shiftingSuspect then
-local emptyRooms = {}
-for r = 1, #rooms do
-local roomName = rooms[r].name
-local isOccupied = false
-for s = 1, #suspects do
-if suspects[s].assignedRoomName == roomName then isOccupied = true; break end
-end
-if not isOccupied then table.insert(emptyRooms, rooms[r]) end
-end
-if #emptyRooms > 0 then
-local chosenRoom = emptyRooms[math.random(1, #emptyRooms)]
-shiftingSuspect.assignedRoomName = chosenRoom.name
-local offset = innerRoomSafeSpots[chosenRoom.name] or { x = 200, y = 100 }
-shiftingSuspect.worldX = chosenRoom.x + offset.x
-shiftingSuspect.worldY = chosenRoom.y + offset.y
--- TRIGGER SUSPECT ESCAPE TRACKER
-if fleeSound then fleeSound:play() end
-end
-end
-gameState = "ROOM_VIEW"
-activeSpeaker = ""
-dialogueText = ""
+    if gameState == "PAUSE" then
+        gameState = stateBeforePause
+        return
+    end
+    if gameState == "TITLE" or gameState == "TUTORIAL" or gameState == "GAME_OVER" then
+        return
+    end
+    if gameState == "DIALOGUE" then
+        local shiftingSuspect = nil
+        for i = 1, #suspects do
+            if suspects[i].name == activeSpeaker then shiftingSuspect = suspects[i]; break end
+        end
+        if shiftingSuspect then
+            local emptyRooms = {}
+            for r = 1, #rooms do
+                local roomName = rooms[r].name
+                local isOccupied = false
+                for s = 1, #suspects do
+                    if suspects[s].assignedRoomName == roomName then isOccupied = true; break end
+                end
+                if not isOccupied then table.insert(emptyRooms, rooms[r]) end
+            end
+            if #emptyRooms > 0 then
+                local chosenRoom = emptyRooms[math.random(1, #emptyRooms)]
+                shiftingSuspect.assignedRoomName = chosenRoom.name
+                local offset = innerRoomSafeSpots[chosenRoom.name] or { x = 200, y = 100 }
+                shiftingSuspect.worldX = chosenRoom.x + offset.x
+                shiftingSuspect.worldY = chosenRoom.y + offset.y
+                
+                -- NEW: Trigger your custom escape audio cue here!
+                if fleeSound then fleeSound:play() end
+            end
+        end
+        gameState = "ROOM_VIEW"
+        activeSpeaker = ""
+        dialogueText = ""
 elseif gameState == "ACCUSE_CONFIRM" then
 gameState = "DIALOGUE"
 elseif gameState == "ACCUSE_WEAPON" then
@@ -933,15 +889,15 @@ elseif gameState == "TUTORIAL" then
 gfx.setColor(gfx.kColorBlack)
 gfx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
 gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
--- Header (Centered, no background overlay block)
+-- Header (Centered, no background overlay block) [1]
 gfx.drawTextAligned("TUTORIAL", SCREEN_WIDTH / 2, 16, gfx.kTextAlignmentCenter)
 gfx.setColor(gfx.kColorWhite)
 gfx.fillRect(20, 36, SCREEN_WIDTH - 40, 1)
--- Scrolling text layout viewport boundary masks (Pushed context lower)
+-- Scrolling text layout viewport boundary masks (Pushed context lower) [1]
 gfx.setClipRect(20, 44, SCREEN_WIDTH - 40, 144)
 local drawY = 48 - tutorialScrollY
 local wrapW = SCREEN_WIDTH - 64 -- Safe wrapping width preventing overflow
--- FIXED: Body Content items now use drawTextInRect with auto-wrap boundaries
+-- FIXED: Body Content items now use drawTextInRect with auto-wrap boundaries [1]
 -- MISSION OBJECTIVE SECTION
 gfx.drawText("MISSION OBJECTIVE:", 24, drawY)
 gfx.drawText("Find the hidden combination of Killer, Weapon,", 24, drawY + 18)
@@ -964,12 +920,12 @@ gfx.drawText("Walk up to suspects inside rooms. They will", 24, drawY + 286)
 gfx.drawText("show you structural clues to automatically", 24, drawY + 302)
 gfx.drawText("cross proven false entries off your notepad.", 24, drawY + 318)
 gfx.clearClipRect()
--- Footer Prompt (Uniform background, no blocking box overlays)
+-- Footer Prompt (Uniform background, no blocking box overlays) [1]
 gfx.fillRect(20, 194, SCREEN_WIDTH - 40, 1)
 if math.floor(playdate.getElapsedTime() * 3) % 2 == 0 then
 gfx.drawTextAligned("PRESS (A) TO START", SCREEN_WIDTH / 3, 206, gfx.kTextAlignmentCenter)
 end
--- Dithered side layout vertical tracking scroll thumb indicator bar
+-- Dithered side layout vertical tracking scroll thumb indicator bar [1]
 local scrollPercentage = tutorialScrollY / tutorialMaxScroll
 local barY = 44 + (scrollPercentage * 125)
 gfx.fillRect(SCREEN_WIDTH - 16, barY, 3, 14)
