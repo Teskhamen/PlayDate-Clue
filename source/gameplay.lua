@@ -37,9 +37,9 @@ function handleDpadInput()
             return
         end
         if playdate.buttonJustPressed(playdate.kButtonUp) or
-           playdate.buttonJustPressed(playdate.kButtonDown) or
-           playdate.buttonJustPressed(playdate.kButtonLeft) or
-           playdate.buttonJustPressed(playdate.kButtonRight) then
+            playdate.buttonJustPressed(playdate.kButtonDown) or
+            playdate.buttonJustPressed(playdate.kButtonLeft) or
+            playdate.buttonJustPressed(playdate.kButtonRight) then
             buttonPressedThisFrame = true
         end
         if playerTilesLeft > 0 then
@@ -272,7 +272,9 @@ function handleCrankInput()
 local crankChange = playdate.getCrankChange()
 if gameState == "TUTORIAL" then
 if not playdate.isCrankDocked() then
-tutorialScrollY = math.max(0, math.min(tutorialMaxScroll, tutorialScrollY + (crankChange * 0.8)))
+tutorialScrollY = math.max(0, tutorialScrollY - (crankChange * 0.8))
+if tutorialScrollY < 0 then tutorialScrollY = 0 end
+if tutorialScrollY > tutorialMaxScroll then tutorialScrollY = tutorialMaxScroll end
 end
 return
 end
@@ -378,8 +380,11 @@ end
 end
 end
 function playdate.AButtonDown()
-if gameState == "PAUSE" then return end
+if gameState == "PAUSE" then
+return
+end
 if gameState == "GAME_OVER" then
+if gameMusic then gameMusic:stop() end
 resetGameEngine()
 gameState = "TITLE"
 return
@@ -389,6 +394,10 @@ gameState = "TUTORIAL"
 return
 end
 if gameState == "TUTORIAL" then
+if titleMusic then titleMusic:stop() end
+if gameMusic and not gameMusic:isPlaying() then
+gameMusic:play(0)
+end
 gameState = "MAP"
 return
 end
@@ -434,76 +443,88 @@ end
 end
 end
 end
+playdate.display.setScale(1)
 function playdate.update()
-gfx.clear()
+playdate.graphics.clear()
 handleDpadInput()
 handleCrankInput()
 if gameState == "TITLE" then
-if titleImage then titleImage:draw(0, 0)
-else
-gfx.setColor(gfx.kColorBlack)
-gfx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
-gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
-gfx.drawTextAligned("MANSION MURDER MYSTERY", SCREEN_WIDTH / 2, 80, gfx.kTextAlignmentCenter)
+if titleMusic and not titleMusic:isPlaying() then
+titleMusic:play(0)
 end
-gfx.setImageDrawMode(gfx.kDrawModeFillBlack)
-gfx.drawTextAligned("Press (A) to start", SCREEN_WIDTH / 3, SCREEN_HEIGHT - 45, gfx.kTextAlignmentCenter)
-gfx.setImageDrawMode(gfx.kDrawModeCopy)
+if titleImage then
+titleImage:draw(0, 0)
+else
+playdate.graphics.setColor(playdate.graphics.kColorBlack)
+playdate.graphics.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
+playdate.graphics.setImageDrawMode(playdate.graphics.kDrawModeFillWhite)
+playdate.graphics.drawTextAligned("MANSION MURDER MYSTERY", SCREEN_WIDTH / 2, 80, playdate.graphics.kTextAlignmentCenter)
+end
+playdate.graphics.setImageDrawMode(playdate.graphics.kDrawModeFillBlack)
+playdate.graphics.drawTextAligned("Press (A) to start", SCREEN_WIDTH / 3, SCREEN_HEIGHT - 45, playdate.graphics.kTextAlignmentCenter)
+playdate.graphics.setImageDrawMode(playdate.graphics.kDrawModeCopy)
 elseif gameState == "TUTORIAL" then
-gfx.setColor(gfx.kColorBlack)
-gfx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
-gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
-gfx.drawTextAligned("TUTORIAL", SCREEN_WIDTH / 2, 16, gfx.kTextAlignmentCenter)
-gfx.setColor(gfx.kColorWhite)
-gfx.fillRect(20, 36, SCREEN_WIDTH - 40, 1)
-gfx.setClipRect(20, 44, SCREEN_WIDTH - 40, 144)
+playdate.graphics.setColor(playdate.graphics.kColorBlack)
+playdate.graphics.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
+playdate.graphics.setImageDrawMode(playdate.graphics.kDrawModeFillWhite)
+playdate.graphics.drawTextAligned("TUTORIAL", SCREEN_WIDTH / 2, 16, playdate.graphics.kTextAlignmentCenter)
+playdate.graphics.setColor(playdate.graphics.kColorWhite)
+playdate.graphics.fillRect(20, 36, SCREEN_WIDTH - 40, 1)
+playdate.graphics.setClipRect(20, 44, SCREEN_WIDTH - 40, 144)
 local drawY = 48 - tutorialScrollY
-gfx.drawText("MISSION OBJECTIVE:", 24, drawY)
-gfx.drawText("Find the hidden combination of Killer, Weapon,", 24, drawY + 18)
-gfx.drawText("and Room sealed inside the secret envelope.", 24, drawY + 34)
-gfx.drawText("STEP BUDGET:", 24, drawY + 68)
-gfx.drawText("You begin with 1000 steps. Moving subtracts", 24, drawY + 86)
-gfx.drawText("steps from your pool automatically.", 24, drawY + 102)
-gfx.drawText("If steps hit 0 before you solve it, you lose!", 24, drawY + 118)
-gfx.drawText("INVESTIGATION CONTROLS:", 24, drawY + 152)
-gfx.drawText("- D-Pad: Move character through corridors.", 24, drawY + 170)
-gfx.drawText("- Crank: Turn crank to open the Full Map", 24, drawY + 186)
-gfx.drawText(" and scroll through the Notebook checklist.", 24, drawY + 202)
-gfx.drawText("- (B) Button: Open/Close your Notepad log.", 24, drawY + 218)
-gfx.drawText("- (A) Button: Confirm choices or accuse.", 24, drawY + 234)
-gfx.drawText("DETECTION TIPS:", 24, drawY + 268)
-gfx.drawText("Walk up to suspects inside rooms. They will", 24, drawY + 286)
-gfx.drawText("show you structural clues to automatically", 24, drawY + 302)
-gfx.drawText("cross proven false entries off your notepad.", 24, drawY + 318)
-gfx.clearClipRect()
-gfx.fillRect(20, 194, SCREEN_WIDTH - 40, 1)
+playdate.graphics.drawText("MISSION OBJECTIVE:", 24, drawY)
+playdate.graphics.drawText("Find the hidden combination of Killer, Weapon,", 24, drawY + 18)
+playdate.graphics.drawText("and Room sealed inside the secret envelope.", 24, drawY + 34)
+playdate.graphics.drawText("STEP BUDGET:", 24, drawY + 68)
+playdate.graphics.drawText("You begin with 1000 steps. Moving subtracts", 24, drawY + 86)
+playdate.graphics.drawText("steps from your pool automatically.", 24, drawY + 102)
+playdate.graphics.drawText("If steps hit 0 before you solve it, you lose!", 24, drawY + 118)
+playdate.graphics.drawText("INVESTIGATION CONTROLS:", 24, drawY + 152)
+playdate.graphics.drawText("- D-Pad: Move character through corridors.", 24, drawY + 170)
+playdate.graphics.drawText("- Crank: Turn crank to open the Full Map", 24, drawY + 186)
+playdate.graphics.drawText(" and scroll through the Notebook checklist.", 24, drawY + 202)
+playdate.graphics.drawText("- (B) Button: Open/Close your Notepad log.", 24, drawY + 218)
+playdate.graphics.drawText("- (A) Button: Confirm choices or accuse.", 24, drawY + 234)
+playdate.graphics.drawText("DETECTION TIPS:", 24, drawY + 268)
+playdate.graphics.drawText("Walk up to suspects inside rooms. They will", 24, drawY + 286)
+playdate.graphics.drawText("show you structural clues to automatically", 24, drawY + 302)
+playdate.graphics.drawText("cross proven false entries off your notepad.", 24, drawY + 318)
+playdate.graphics.clearClipRect()
+playdate.graphics.fillRect(20, 194, SCREEN_WIDTH - 40, 1)
 if math.floor(playdate.getElapsedTime() * 3) % 2 == 0 then
-gfx.drawTextAligned("PRESS (A) TO START", SCREEN_WIDTH / 3, 206, gfx.kTextAlignmentCenter)
+playdate.graphics.drawTextAligned("PRESS (A) TO START", SCREEN_WIDTH / 3, 206, playdate.graphics.kTextAlignmentCenter)
 end
 local scrollPercentage = tutorialScrollY / tutorialMaxScroll
 local barY = 44 + (scrollPercentage * 125)
-gfx.fillRect(SCREEN_WIDTH - 16, barY, 3, 14)
-gfx.setImageDrawMode(gfx.kDrawModeCopy)
+playdate.graphics.fillRect(SCREEN_WIDTH - 16, barY, 3, 14)
+playdate.graphics.setImageDrawMode(playdate.graphics.kDrawModeCopy)
 elseif gameState == "MAP" then
-if roomBackgrounds.mansion then roomBackgrounds.mansion:draw(-cameraX, -cameraY) end
-if playerSpriteImage then playerSpriteImage:draw(playerX - cameraX, playerY - cameraY)
-else
-gfx.setColor(gfx.kColorWhite)
-gfx.fillEllipseInRect(playerX - cameraX, playerY - cameraY, playerSize, playerSize)
-gfx.setColor(gfx.kColorBlack)
-gfx.drawEllipseInRect(playerX - cameraX, playerY - cameraY, playerSize, playerSize)
+if roomBackgrounds.mansion then
+roomBackgrounds.mansion:draw(-cameraX, -cameraY)
 end
-gfx.setColor(gfx.kColorBlack)
-gfx.fillRect(0, 0, SCREEN_WIDTH, 20)
-gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
-gfx.drawText(string.format("STEPS: %i | ACCUSATIONS: %i", playerTilesLeft, totalAccusationsLeft), 10, 2)
-gfx.setColor(gfx.kColorBlack)
-gfx.fillRect(0, SCREEN_HEIGHT - 20, SCREEN_WIDTH, 20)
+if playerSpriteImage then
+playerSpriteImage:draw(playerX - cameraX, playerY - cameraY)
+else
+playdate.graphics.setColor(playdate.graphics.kColorWhite)
+playdate.graphics.fillEllipseInRect(playerX - cameraX, playerY - cameraY, playerSize, playerSize)
+playdate.graphics.setColor(playdate.graphics.kColorBlack)
+playdate.graphics.drawEllipseInRect(playerX - cameraX, playerY - cameraY, playerSize, playerSize)
+end
+playdate.graphics.setColor(playdate.graphics.kColorBlack)
+playdate.graphics.fillRect(0, 0, SCREEN_WIDTH, 20)
+playdate.graphics.setImageDrawMode(playdate.graphics.kDrawModeFillWhite)
+playdate.graphics.drawText(string.format("STEPS: %i | ACCUSATIONS: %i", playerTilesLeft, totalAccusationsLeft), 10, 2)
+playdate.graphics.setColor(playdate.graphics.kColorBlack)
+playdate.graphics.fillRect(0, SCREEN_HEIGHT - 20, SCREEN_WIDTH, 20)
 local roomString = "Path"
-if currentRoom then roomString = string.format("Room: %s", currentRoom.name)
-elseif playerTilesLeft == 0 then roomString = "OUT OF STEPS!" end
-gfx.drawText(string.format("%s | X: %i, Y: %i", roomString, playerX, playerY), 10, SCREEN_HEIGHT - 18)
-gfx.setImageDrawMode(gfx.kDrawModeCopy)
+if currentRoom then
+roomString = string.format("Room: %s", currentRoom.name)
+elseif playerTilesLeft == 0 then
+roomString = "OUT OF STEPS!"
+end
+local bottomHudText = string.format("%s | X: %i, Y: %i", roomString, playerX, playerY)
+playdate.graphics.drawText(bottomHudText, 10, SCREEN_HEIGHT - 18)
+playdate.graphics.setImageDrawMode(playdate.graphics.kDrawModeCopy)
 elseif gameState == "MAP_FULL" then
 if roomBackgrounds.board then
 local boardWidth, boardHeight = roomBackgrounds.board:getSize()
@@ -515,203 +536,238 @@ local percentY = playerY / MAP_HEIGHT
 local targetX = centeredX + (percentX * boardWidth) - (playerSize / 2)
 local targetY = centeredY + (percentY * boardHeight) - (playerSize / 2)
 if math.floor(playdate.getElapsedTime() * 4) % 2 == 0 then
-gfx.setColor(gfx.kColorWhite)
-gfx.fillEllipseInRect(targetX, targetY, playerSize / 2, playerSize / 2)
-gfx.setColor(gfx.kColorBlack)
-gfx.drawEllipseInRect(targetX - 2, targetY - 2, playerSize + 4, playerSize + 4)
+playdate.graphics.setColor(playdate.graphics.kColorWhite)
+playdate.graphics.fillEllipseInRect(targetX, targetY, playerSize / 2, playerSize / 2)
+playdate.graphics.setColor(playdate.graphics.kColorBlack)
+playdate.graphics.drawEllipseInRect(targetX - 2, targetY - 2, playerSize + 4, playerSize + 4)
 else
-gfx.setColor(gfx.kColorBlack)
-gfx.fillEllipseInRect(targetX, targetY, playerSize / 2, playerSize / 2)
-gfx.setColor(gfx.kColorWhite)
-gfx.drawEllipseInRect(targetX, targetY, playerSize / 2, playerSize / 2)
+playdate.graphics.setColor(playdate.graphics.kColorBlack)
+playdate.graphics.fillEllipseInRect(targetX, targetY, playerSize / 2, playerSize / 2)
+playdate.graphics.setColor(playdate.graphics.kColorWhite)
+playdate.graphics.drawEllipseInRect(targetX, targetY, playerSize / 2, playerSize / 2)
 end
 end
 elseif gameState == "ROOM_VIEW" then
-if currentRoom and currentRoom.img then currentRoom.img:draw(0, 20)
-else gfx.drawText("Error: Room asset missing!", 20, 20) end
+if currentRoom and currentRoom.img then
+currentRoom.img:draw(0, 20)
+else
+playdate.graphics.drawText("Error: Room asset missing!", 20, 20)
+end
 if currentRoom then
 for i = 1, #suspects do
 local suspect = suspects[i]
 if suspect.assignedRoomName == currentRoom.name then
 local localSuspectX = suspect.worldX - currentRoom.x
 local localSuspectY = (suspect.worldY - currentRoom.y) + 20
-if suspect.img then suspect.img:draw(localSuspectX, localSuspectY)
+if suspect.img then
+suspect.img:draw(localSuspectX, localSuspectY)
 else
-gfx.setColor(gfx.kColorBlack)
-gfx.fillEllipseInRect(localSuspectX, localSuspectY, playerSize, playerSize)
-gfx.setColor(gfx.kColorWhite)
-gfx.drawEllipseInRect(localSuspectX, localSuspectY, playerSize, playerSize)
+playdate.graphics.setColor(playdate.graphics.kColorBlack)
+playdate.graphics.fillEllipseInRect(localSuspectX, localSuspectY, playerSize, playerSize)
+playdate.graphics.setColor(playdate.graphics.kColorWhite)
+playdate.graphics.drawEllipseInRect(localSuspectX, localSuspectY, playerSize, playerSize)
 end
 end
 end
 end
-local localPlayerX = currentRoom and (playerX - currentRoom.x) or 200
-local localPlayerY = currentRoom and ((playerY - currentRoom.y) + 20) or 120
-if playerSpriteImage then playerSpriteImage:draw(localPlayerX, localPlayerY)
+local localPlayerX = 200
+local localPlayerY = 120
+if currentRoom then
+localPlayerX = playerX - currentRoom.x
+localPlayerY = (playerY - currentRoom.y) + 20
+end
+if playerSpriteImage then
+playerSpriteImage:draw(localPlayerX, localPlayerY)
 else
-gfx.setColor(gfx.kColorWhite)
-gfx.fillEllipseInRect(localPlayerX, localPlayerY, playerSize, playerSize)
-gfx.setColor(gfx.kColorBlack)
-gfx.drawEllipseInRect(localPlayerX, localPlayerY, playerSize, playerSize)
+playdate.graphics.setColor(playdate.graphics.kColorWhite)
+playdate.graphics.fillEllipseInRect(localPlayerX, localPlayerY, playerSize, playerSize)
+playdate.graphics.setColor(playdate.graphics.kColorBlack)
+playdate.graphics.drawEllipseInRect(localPlayerX, localPlayerY, playerSize, playerSize)
 end
-gfx.setColor(gfx.kColorBlack)
-gfx.fillRect(0, 0, SCREEN_WIDTH, 20)
-gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
-gfx.drawText(string.format("STEPS: %i | ACCUSATIONS: %i", playerTilesLeft, totalAccusationsLeft), 10, 2)
-gfx.setColor(gfx.kColorBlack)
-gfx.fillRect(0, SCREEN_HEIGHT - 20, SCREEN_WIDTH, 20)
+playdate.graphics.setColor(playdate.graphics.kColorBlack)
+playdate.graphics.fillRect(0, 0, SCREEN_WIDTH, 20)
+playdate.graphics.setImageDrawMode(playdate.graphics.kDrawModeFillWhite)
+playdate.graphics.drawText(string.format("STEPS: %i | ACCUSATIONS: %i", playerTilesLeft, totalAccusationsLeft), 10, 2)
+playdate.graphics.setColor(playdate.graphics.kColorBlack)
+playdate.graphics.fillRect(0, SCREEN_HEIGHT - 20, SCREEN_WIDTH, 20)
 local roomName = currentRoom and currentRoom.name or "Unknown"
-gfx.drawText(string.format("%s | World: %i,%i | Room: %i,%i", roomName, playerX, playerY, localPlayerX, localPlayerY - 20), 6, SCREEN_HEIGHT - 18)
-gfx.setImageDrawMode(gfx.kDrawModeCopy)
+local debugText = string.format("%s | World: %i,%i | Room: %i,%i", roomName, playerX, playerY, localPlayerX, localPlayerY - 20)
+playdate.graphics.drawText(debugText, 6, SCREEN_HEIGHT - 18)
+playdate.graphics.setImageDrawMode(playdate.graphics.kDrawModeCopy)
 elseif gameState == "NOTEPAD" then
-gfx.setImageDrawMode(gfx.kDrawModeCopy)
-gfx.setColor(gfx.kColorBlack)
-gfx.drawText("DETECTIVE NOTEPAD", 125, 8)
-gfx.drawLine(20, 24, 380, 24)
-for i = 1, 8 do
+playdate.graphics.setImageDrawMode(playdate.graphics.kDrawModeCopy)
+playdate.graphics.setColor(playdate.graphics.kColorBlack)
+playdate.graphics.drawText("DETECTIVE NOTEPAD", 125, 8)
+playdate.graphics.drawLine(20, 24, 380, 24)
+local maxRows = 8
+for i = 1, maxRows do
 local itemIndex = i + scrollOffset
 if itemIndex <= #checklist then
 local currentY = 32 + ((i - 1) * 22)
 local item = checklist[itemIndex]
-if item.isHeader then gfx.drawText(item.category, 120, currentY)
+if item.isHeader then
+playdate.graphics.drawText(item.category, 120, currentY)
 else
-if itemIndex == selectedIndex then gfx.drawText("->", 15, currentY) end
-gfx.drawRect(45, currentY + 2, 11, 11)
-if item.checked then
-gfx.drawText("X", 47, currentY - 1)
-gfx.drawLine(65, currentY + 7, 300, currentY + 7)
+if itemIndex == selectedIndex then
+playdate.graphics.drawText("->", 15, currentY)
 end
-gfx.drawText(item.name, 65, currentY)
+playdate.graphics.drawRect(45, currentY + 2, 11, 11)
+if item.checked then
+playdate.graphics.drawText("X", 47, currentY - 1)
+playdate.graphics.drawLine(65, currentY + 7, 300, currentY + 7)
+end
+playdate.graphics.drawText(item.name, 65, currentY)
 end
 end
 end
 elseif gameState == "DIALOGUE" then
-if currentRoom and currentRoom.img then currentRoom.img:draw(0, 20) end
+if currentRoom and currentRoom.img then
+currentRoom.img:draw(0, 20)
+end
 if currentRoom then
 for i = 1, #suspects do
 local suspect = suspects[i]
-if suspect.assignedRoomName == currentRoom.name and suspect.img then
-suspect.img:draw(suspect.worldX - currentRoom.x, (suspect.worldY - currentRoom.y) + 20)
+if suspect.assignedRoomName == currentRoom.name then
+local localSuspectX = suspect.worldX - currentRoom.x
+local localSuspectY = (suspect.worldY - currentRoom.y) + 20
+if suspect.img then suspect.img:draw(localSuspectX, localSuspectY) end
 end
 end
 end
-local localPlayerX = currentRoom and (playerX - currentRoom.x) or 200
-local localPlayerY = currentRoom and ((playerY - currentRoom.y) + 20) or 120
+local localPlayerX = 200
+local localPlayerY = 120
+if currentRoom then
+localPlayerX = playerX - currentRoom.x
+localPlayerY = (playerY - currentRoom.y) + 20
+end
 if playerSpriteImage then playerSpriteImage:draw(localPlayerX, localPlayerY) end
-gfx.setImageDrawMode(gfx.kDrawModeCopy)
-gfx.setColor(gfx.kColorWhite)
-gfx.fillRect(15, SCREEN_HEIGHT - 75, SCREEN_WIDTH - 30, 60)
-gfx.setColor(gfx.kColorBlack)
-gfx.drawRect(15, SCREEN_HEIGHT - 75, SCREEN_WIDTH - 30, 60)
-gfx.drawRect(17, SCREEN_HEIGHT - 73, SCREEN_WIDTH - 34, 56)
-gfx.drawText(activeSpeaker:upper(), 25, SCREEN_HEIGHT - 70)
-gfx.drawTextInRect(dialogueText, 25, SCREEN_HEIGHT - 52, SCREEN_WIDTH - 50, 35, 0, gfx.kTextAlignLeft)
+playdate.graphics.setImageDrawMode(playdate.graphics.kDrawModeCopy)
+playdate.graphics.setColor(playdate.graphics.kColorWhite)
+playdate.graphics.fillRect(15, SCREEN_HEIGHT - 75, SCREEN_WIDTH - 30, 60)
+playdate.graphics.setColor(playdate.graphics.kColorBlack)
+playdate.graphics.drawRect(15, SCREEN_HEIGHT - 75, SCREEN_WIDTH - 30, 60)
+playdate.graphics.drawRect(17, SCREEN_HEIGHT - 73, SCREEN_WIDTH - 34, 56)
+playdate.graphics.drawText(activeSpeaker:upper(), 25, SCREEN_HEIGHT - 70)
+playdate.graphics.drawTextInRect(dialogueText, 25, SCREEN_HEIGHT - 52, SCREEN_WIDTH - 50, 35, 0, playdate.graphics.kTextAlignLeft)
 if math.floor(playdate.getElapsedTime() * 3) % 2 == 0 then
-gfx.drawText("(B) BACK", SCREEN_WIDTH - 375, SCREEN_HEIGHT - 35)
-if not isCrossedOff(activeSpeaker) then gfx.drawText("(A) ACCUSE", SCREEN_WIDTH - 110, SCREEN_HEIGHT - 35) end
+playdate.graphics.drawText("(B) BACK", SCREEN_WIDTH - 375, SCREEN_HEIGHT - 35)
+if not isCrossedOff(activeSpeaker) then
+playdate.graphics.drawText("(A) ACCUSE", SCREEN_WIDTH - 110, SCREEN_HEIGHT - 35)
+end
 end
 elseif gameState == "ACCUSE_CONFIRM" then
 if currentRoom and currentRoom.img then currentRoom.img:draw(0, 20) end
-gfx.setColor(gfx.kColorBlack)
-gfx.fillRect(20, 40, SCREEN_WIDTH - 40, SCREEN_HEIGHT - 80)
-gfx.setColor(gfx.kColorWhite)
-gfx.drawRect(20, 40, SCREEN_WIDTH - 40, SCREEN_HEIGHT - 80)
-gfx.drawRect(22, 42, SCREEN_WIDTH - 44, SCREEN_HEIGHT - 84)
-gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
-gfx.drawText("CRITICAL ACCUSATION PROMPT", 100, 55)
-gfx.drawLine(40, 75, 360, 75)
-gfx.drawTextInRect(string.format("Are you absolutely sure you want to formally accuse %s of committing the crime?", activeSpeaker:upper()), 40, 95, SCREEN_WIDTH - 80, 50, 0, gfx.kTextAlignCenter)
-gfx.drawText("(A) CONFIRM SUSPECT", SCREEN_WIDTH - 200, SCREEN_HEIGHT - 70)
-gfx.drawText("(B) CANCEL", SCREEN_WIDTH - 360, SCREEN_HEIGHT - 70)
-gfx.setImageDrawMode(gfx.kDrawModeCopy)
+playdate.graphics.setColor(playdate.graphics.kColorBlack)
+playdate.graphics.fillRect(20, 40, SCREEN_WIDTH - 40, SCREEN_HEIGHT - 80)
+playdate.graphics.setColor(playdate.graphics.kColorWhite)
+playdate.graphics.drawRect(20, 40, SCREEN_WIDTH - 40, SCREEN_HEIGHT - 80)
+playdate.graphics.drawRect(22, 42, SCREEN_WIDTH - 44, SCREEN_HEIGHT - 84)
+playdate.graphics.setImageDrawMode(playdate.graphics.kDrawModeFillWhite)
+playdate.graphics.drawText("CRITICAL ACCUSATION PROMPT", 100, 55)
+playdate.graphics.drawLine(40, 75, 360, 75)
+local linesText = string.format("Are you absolutely sure you want to formally accuse %s of committing the crime?", activeSpeaker:upper())
+playdate.graphics.drawTextInRect(linesText, 40, 95, SCREEN_WIDTH - 80, 50, 0, playdate.graphics.kTextAlignCenter)
+playdate.graphics.drawText("(A) CONFIRM SUSPECT", SCREEN_WIDTH - 200, SCREEN_HEIGHT - 70)
+playdate.graphics.drawText("(B) CANCEL", SCREEN_WIDTH - 360, SCREEN_HEIGHT - 70)
+playdate.graphics.setImageDrawMode(playdate.graphics.kDrawModeCopy)
 elseif gameState == "ACCUSE_WEAPON" then
 if currentRoom and currentRoom.img then currentRoom.img:draw(0, 20) end
-gfx.setColor(gfx.kColorBlack)
-gfx.fillRect(30, 30, SCREEN_WIDTH - 60, SCREEN_HEIGHT - 60)
-gfx.setColor(gfx.kColorWhite)
-gfx.drawRect(30, 30, SCREEN_WIDTH - 60, SCREEN_HEIGHT - 60)
-gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
-gfx.drawText("SELECT MURDER WEAPON", 110, 40)
-gfx.drawLine(45, 58, 355, 58)
+playdate.graphics.setColor(playdate.graphics.kColorBlack)
+playdate.graphics.fillRect(30, 30, SCREEN_WIDTH - 60, SCREEN_HEIGHT - 60)
+playdate.graphics.setColor(playdate.graphics.kColorWhite)
+playdate.graphics.drawRect(30, 30, SCREEN_WIDTH - 60, SCREEN_HEIGHT - 60)
+playdate.graphics.setImageDrawMode(playdate.graphics.kDrawModeFillWhite)
+playdate.graphics.drawText("SELECT MURDER WEAPON", 110, 40)
+playdate.graphics.drawLine(45, 58, 355, 58)
 for i = 1, #dynamicWeapons do
 local currentY = 65 + ((i - 1) * 18)
-if i == accuseWeaponIndex then gfx.drawText("-> " .. dynamicWeapons[i]:upper(), 130, currentY)
-else gfx.drawText(dynamicWeapons[i], 150, currentY) end
+if i == accuseWeaponIndex then
+playdate.graphics.drawText("-> " .. dynamicWeapons[i]:upper(), 130, currentY)
+else
+playdate.graphics.drawText(dynamicWeapons[i], 150, currentY)
 end
-gfx.drawText("(A) CONFIRM WEAPON", SCREEN_WIDTH - 205, SCREEN_HEIGHT - 52)
-gfx.drawText("(B) GO BACK", SCREEN_WIDTH - 355, SCREEN_HEIGHT - 52)
-gfx.setImageDrawMode(gfx.kDrawModeCopy)
+end
+playdate.graphics.drawText("(A) CONFIRM WEAPON", SCREEN_WIDTH - 205, SCREEN_HEIGHT - 52)
+playdate.graphics.drawText("(B) GO BACK", SCREEN_WIDTH - 355, SCREEN_HEIGHT - 52)
+playdate.graphics.setImageDrawMode(playdate.graphics.kDrawModeCopy)
 elseif gameState == "ACCUSE_ROOM" then
 if currentRoom and currentRoom.img then currentRoom.img:draw(0, 20) end
-gfx.setColor(gfx.kColorBlack)
-gfx.fillRect(30, 22, SCREEN_WIDTH - 60, SCREEN_HEIGHT - 44)
-gfx.setColor(gfx.kColorWhite)
-gfx.drawRect(30, 22, SCREEN_WIDTH - 60, SCREEN_HEIGHT - 44)
-gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
-gfx.drawText("SELECT CRIME SCENE", 110, 28)
-gfx.drawLine(45, 44, 355, 44)
+playdate.graphics.setColor(playdate.graphics.kColorBlack)
+playdate.graphics.fillRect(30, 22, SCREEN_WIDTH - 60, SCREEN_HEIGHT - 44)
+playdate.graphics.setColor(playdate.graphics.kColorWhite)
+playdate.graphics.drawRect(30, 22, SCREEN_WIDTH - 60, SCREEN_HEIGHT - 44)
+playdate.graphics.setImageDrawMode(playdate.graphics.kDrawModeFillWhite)
+playdate.graphics.drawText("SELECT CRIME SCENE", 110, 28)
+playdate.graphics.drawLine(45, 44, 355, 44)
 for i = 1, #dynamicRooms do
 local currentY = 48 + ((i - 1) * 15)
-if i == accuseRoomIndex then gfx.drawText("-> " .. dynamicRooms[i]:upper(), 110, currentY)
-else gfx.drawText(dynamicRooms[i], 130, currentY) end
+if i == accuseRoomIndex then
+playdate.graphics.drawText("-> " .. dynamicRooms[i]:upper(), 110, currentY)
+else
+playdate.graphics.drawText(dynamicRooms[i], 130, currentY)
 end
-gfx.drawText("(A) CONFIRM ROOM", SCREEN_WIDTH - 185, SCREEN_HEIGHT - 42)
-gfx.drawText("(B) GO BACK", SCREEN_WIDTH - 355, SCREEN_HEIGHT - 42)
-gfx.setImageDrawMode(gfx.kDrawModeCopy)
+end
+playdate.graphics.drawText("(A) CONFIRM ROOM", SCREEN_WIDTH - 185, SCREEN_HEIGHT - 42)
+playdate.graphics.drawText("(B) GO BACK", SCREEN_WIDTH - 355, SCREEN_HEIGHT - 42)
+playdate.graphics.setImageDrawMode(playdate.graphics.kDrawModeCopy)
 elseif gameState == "ACCUSE_SUMMARY" then
 if currentRoom and currentRoom.img then currentRoom.img:draw(0, 20) end
-gfx.setColor(gfx.kColorBlack)
-gfx.fillRect(20, 35, SCREEN_WIDTH - 40, SCREEN_HEIGHT - 70)
-gfx.setColor(gfx.kColorWhite)
-gfx.drawRect(20, 35, SCREEN_WIDTH - 40, SCREEN_HEIGHT - 70)
-gfx.drawRect(22, 37, SCREEN_WIDTH - 44, SCREEN_HEIGHT - 74)
-gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
-gfx.drawText("FINAL ACCUSATION", 105, 45)
-gfx.drawLine(40, 65, 360, 65)
-gfx.drawText("SUSPECT : " .. activeSpeaker:upper(), 60, 85)
-gfx.drawText("WEAPON : " .. finalAccuseWeapon:upper(), 60, 110)
-gfx.drawText("ROOM : " .. finalAccuseRoom:upper(), 60, 135)
-gfx.drawText("(A) ACCUSE!", SCREEN_WIDTH - 135, SCREEN_HEIGHT - 60)
-gfx.drawText("(B) GO BACK", SCREEN_WIDTH - 350, SCREEN_HEIGHT - 60)
-gfx.setImageDrawMode(gfx.kDrawModeCopy)
+playdate.graphics.setColor(playdate.graphics.kColorBlack)
+playdate.graphics.fillRect(20, 35, SCREEN_WIDTH - 40, SCREEN_HEIGHT - 70)
+playdate.graphics.setColor(playdate.graphics.kColorWhite)
+playdate.graphics.drawRect(20, 35, SCREEN_WIDTH - 40, SCREEN_HEIGHT - 70)
+playdate.graphics.drawRect(22, 37, SCREEN_WIDTH - 44, SCREEN_HEIGHT - 74)
+playdate.graphics.setImageDrawMode(playdate.graphics.kDrawModeFillWhite)
+playdate.graphics.drawText("FINAL ACCUSATION", 105, 45)
+playdate.graphics.drawLine(40, 65, 360, 65)
+playdate.graphics.drawText("SUSPECT : " .. activeSpeaker:upper(), 60, 85)
+playdate.graphics.drawText("WEAPON : " .. finalAccuseWeapon:upper(), 60, 110)
+playdate.graphics.drawText("ROOM : " .. finalAccuseRoom:upper(), 60, 135)
+playdate.graphics.drawText("(A) ACCUSE!", SCREEN_WIDTH - 135, SCREEN_HEIGHT - 60)
+playdate.graphics.drawText("(B) GO BACK", SCREEN_WIDTH - 350, SCREEN_HEIGHT - 60)
+playdate.graphics.setImageDrawMode(playdate.graphics.kDrawModeCopy)
 elseif gameState == "REVEAL_ENVELOPE" then
-if currentRoom and currentRoom.img then currentRoom.img:draw(0, 20)
-elseif roomBackgrounds.mansion then roomBackgrounds.mansion:draw(-cameraX, -cameraY) end
-gfx.setColor(gfx.kColorBlack)
-gfx.fillRect(30, 25, SCREEN_WIDTH - 60, SCREEN_HEIGHT - 50)
-gfx.setColor(gfx.kColorWhite)
-gfx.drawRect(30, 25, SCREEN_WIDTH - 60, SCREEN_HEIGHT - 50)
-gfx.drawRect(32, 27, SCREEN_WIDTH - 64, SCREEN_HEIGHT - 54)
-gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
-gfx.drawText("TOP SECRET CASE FILE", 115, 38)
-gfx.drawLine(45, 56, 355, 56)
-gfx.drawText("KILLER : " .. caseFile.killer:upper(), 60, 75)
-gfx.drawText("WEAPON : " .. caseFile.weapon:upper(), 60, 105)
-gfx.drawText("ROOM : " .. caseFile.room:upper(), 60, 135)
-gfx.drawLine(45, 170, 355, 170)
-gfx.drawText("PRESS (A) TO CLOSE CASE ENVELOPE", 65, 185)
-gfx.setImageDrawMode(gfx.kDrawModeCopy)
-elseif gameState == "GAME_OVER" then
-if gameOverImage then gameOverImage:draw(0, 0)
-else
-gfx.setColor(gfx.kColorBlack)
-gfx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
-gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
-gfx.drawTextAligned("INVESTIGATION CONCLUDED", SCREEN_WIDTH / 2, 80, gfx.kTextAlignmentCenter)
+if currentRoom and currentRoom.img then
+currentRoom.img:draw(0, 20)
+elseif roomBackgrounds.mansion then
+roomBackgrounds.mansion:draw(-cameraX, -cameraY)
 end
-gfx.setImageDrawMode(gfx.kDrawModeCopy)
-gfx.drawTextAligned("(A) Play Again", SCREEN_WIDTH / 5, 190, gfx.kTextAlignmentCenter)
+playdate.graphics.setColor(playdate.graphics.kColorBlack)
+playdate.graphics.fillRect(30, 25, SCREEN_WIDTH - 60, SCREEN_HEIGHT - 50)
+playdate.graphics.setColor(playdate.graphics.kColorWhite)
+playdate.graphics.drawRect(30, 25, SCREEN_WIDTH - 60, SCREEN_HEIGHT - 50)
+playdate.graphics.drawRect(32, 27, SCREEN_WIDTH - 64, SCREEN_HEIGHT - 54)
+playdate.graphics.setImageDrawMode(playdate.graphics.kDrawModeFillWhite)
+playdate.graphics.drawText("TOP SECRET CASE FILE", 115, 38)
+playdate.graphics.drawLine(45, 56, 355, 56)
+playdate.graphics.drawText("KILLER : " .. caseFile.killer:upper(), 60, 75)
+playdate.graphics.drawText("WEAPON : " .. caseFile.weapon:upper(), 60, 105)
+playdate.graphics.drawText("ROOM : " .. caseFile.room:upper(), 60, 135)
+playdate.graphics.drawLine(45, 170, 355, 170)
+playdate.graphics.drawText("PRESS (A) TO CLOSE CASE ENVELOPE", 65, 185)
+playdate.graphics.setImageDrawMode(playdate.graphics.kDrawModeCopy)
+elseif gameState == "GAME_OVER" then
+if gameOverImage then
+gameOverImage:draw(0, 0)
+else
+playdate.graphics.setColor(playdate.graphics.kColorBlack)
+playdate.graphics.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
+playdate.graphics.setImageDrawMode(playdate.graphics.kDrawModeFillWhite)
+playdate.graphics.drawTextAligned("INVESTIGATION CONCLUDED", SCREEN_WIDTH / 2, 80, playdate.graphics.kTextAlignmentCenter)
+end
+playdate.graphics.setImageDrawMode(playdate.graphics.kDrawModeCopy)
+playdate.graphics.drawTextAligned("(A) Play Again", SCREEN_WIDTH / 5, 190, playdate.graphics.kTextAlignmentCenter)
 elseif gameState == "PAUSE" then
 if pauseImage then
 pauseImage:draw(0, 0)
-gfx.drawTextAligned("Press (B) to Resume", SCREEN_WIDTH / 3.3, SCREEN_HEIGHT - 45, gfx.kTextAlignmentCenter)
+playdate.graphics.drawTextAligned("Press (B) to Resume", SCREEN_WIDTH / 3.3, SCREEN_HEIGHT - 45, playdate.graphics.kTextAlignmentCenter)
 else
-gfx.setColor(gfx.kColorBlack)
-gfx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
-gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
-gfx.drawTextAligned("GAME PAUSED", SCREEN_WIDTH / 2, 100, gfx.kTextAlignmentCenter)
-gfx.drawTextAligned("Press (B) to Resume", SCREEN_WIDTH / 2, 140, gfx.kTextAlignmentCenter)
+playdate.graphics.setColor(playdate.graphics.kColorBlack)
+playdate.graphics.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
+playdate.graphics.setImageDrawMode(playdate.graphics.kDrawModeFillWhite)
+playdate.graphics.drawTextAligned("GAME PAUSED", SCREEN_WIDTH / 2, 100, playdate.graphics.kTextAlignmentCenter)
+playdate.graphics.drawTextAligned("Press (B) to Resume", SCREEN_WIDTH / 2, 140, playdate.graphics.kTextAlignmentCenter)
 end
-gfx.setImageDrawMode(gfx.kDrawModeCopy)
+playdate.graphics.setImageDrawMode(playdate.graphics.kDrawModeCopy)
 end
 end

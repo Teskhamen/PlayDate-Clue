@@ -69,3 +69,11 @@ suspects = {
     { name = "Mrs. Peacock",     img = gfx.image.new("images/peacock_sprite"), hand = {} },
     { name = "Professor Plum",   img = gfx.image.new("images/plum_sprite"),    hand = {} }
 }
+-- Append to the very bottom of assets.lua
+
+-- Create streaming audio file players for background loops
+titleMusic = playdate.sound.fileplayer.new("audio/intro_music")
+if not titleMusic then print("Warning: Missing audio/title_theme.wav") end
+
+gameMusic = playdate.sound.fileplayer.new("audio/game_music")
+if not gameMusic then print("Warning: Missing audio/game_theme.wav") end
