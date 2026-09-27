@@ -1,4 +1,4 @@
--- main.lua
+-- main.lua (Lines 1 - 100)
 import "CoreLibs/graphics"
 import "CoreLibs/sprites"
 import "CoreLibs/ui"
@@ -38,8 +38,11 @@ local dynamicKillers = {}
 local dynamicWeapons = {}
 local dynamicRooms   = {}
 
+-- Menu Item Placeholder Handler
+local pauseMenuItem = nil
+
 -- ==========================================================
--- MUSIC AUDIO STORAGE CONFIGURATION
+-- MUSIC & SOUND AUDIO STORAGE CONFIGURATION
 -- ==========================================================
 local titleMusic, titleMusicErr = playdate.sound.fileplayer.new("audio/intro music")
 if titleMusicErr then print("Audio Loading Alert (Intro Theme): " .. tostring(titleMusicErr)) end
@@ -47,12 +50,13 @@ if titleMusicErr then print("Audio Loading Alert (Intro Theme): " .. tostring(ti
 local gameMusic, gameMusicErr = playdate.sound.fileplayer.new("audio/game music")
 if gameMusicErr then print("Audio Loading Alert (Game Theme): " .. tostring(gameMusicErr)) end
 
--- NEW: Load the short escape sound clip as a low-latency sample player
-local fleeSound, fleeSoundErr = playdate.sound.sampleplayer.new("audio/escape")
-if fleeSoundErr then print("Audio Loading Alert (Escape Sound): " .. tostring(fleeSoundErr)) end
--- NEW: Load the scroll audio track as a sample player
+-- Load short scroll sample effect as a sampleplayer for instant, low-latency playback
 local scrollSound, scrollSoundErr = playdate.sound.sampleplayer.new("audio/scroll_click")
 if scrollSoundErr then print("Audio Loading Alert (Scroll Sound): " .. tostring(scrollSoundErr)) end
+
+-- Load suspect fleeing/escape sound clip safely
+local fleeSound, fleeSoundErr = playdate.sound.sampleplayer.new("audio/escape")
+if fleeSoundErr then print("Audio Loading Alert (Escape Sound): " .. tostring(fleeSoundErr)) end
 
 -- Load your mask layout safely
 local maskImage = gfx.image.new("images/mask_map")
@@ -89,6 +93,7 @@ end
 -- ==========================================================
 local roomBackgrounds = {
     mansion          = gfx.image.new("images/Big_Map"), 
+-- main.lua (Lines 101 - 200)
     board            = gfx.image.new("images/Map_Full"),    
     ballroom         = gfx.image.new("images/Ball_Room"), 
     ballRoomMask     = gfx.image.new("images/Ball_Room_Mask"),
@@ -155,6 +160,7 @@ local caseFile = { killer = "", weapon = "", room = "" }
 local checklist = {}
 
 local function createBlankNotepad()
+-- main.lua (Lines 201 - 300)
     return {
         { category = "--- KILLERS ---", isHeader = true },
         { name = "Miss Scarlet", checked = false },
@@ -222,7 +228,7 @@ local innerRoomSafeSpots = {
     ["Ballroom"]     = { x = 200, y = 110 },
     ["Kitchen"]      = { x = 200, y = 100 }
 }
-
+-- main.lua (Lines 301 - 400)
 local function shuffleTable(t)
     for i = #t, 2, -1 do
         local j = math.random(1, i)
@@ -262,173 +268,183 @@ local function populateDynamicLists()
     
     local sortingMode = "NONE"
     for _, row in ipairs(checklist) do
-if row.isHeader then
-if string.find(row.category, "KILLERS") then sortingMode = "KILLER"
-elseif string.find(row.category, "WEAPONS") then sortingMode = "WEAPON"
-elseif string.find(row.category, "ROOMS") then sortingMode = "ROOM" end
-else
-if not row.checked then
-if sortingMode == "KILLER" then table.insert(dynamicKillers, row.name)
-elseif sortingMode == "WEAPON" then table.insert(dynamicWeapons, row.name)
-elseif sortingMode == "ROOM" then table.insert(dynamicRooms, row.name) end
+        if row.isHeader then
+            if string.find(row.category, "KILLERS") then sortingMode = "KILLER"
+            elseif string.find(row.category, "WEAPONS") then sortingMode = "WEAPON"
+            elseif string.find(row.category, "ROOMS") then sortingMode = "ROOM" end
+        else
+            if not row.checked then
+                if sortingMode == "KILLER" then table.insert(dynamicKillers, row.name)
+                elseif sortingMode == "WEAPON" then table.insert(dynamicWeapons, row.name)
+                elseif sortingMode == "ROOM" then table.insert(dynamicRooms, row.name) end
+            end
+        end
+    end
+    if #dynamicKillers == 0 then table.insert(dynamicKillers, caseFile.killer) end
+    if #dynamicWeapons == 0 then table.insert(dynamicWeapons, caseFile.weapon) end
+    if #dynamicRooms == 0 then table.insert(dynamicRooms, caseFile.room) end
 end
-end
-end
-if #dynamicKillers == 0 then table.insert(dynamicKillers, caseFile.killer) end
-if #dynamicWeapons == 0 then table.insert(dynamicWeapons, caseFile.weapon) end
-if #dynamicRooms == 0 then table.insert(dynamicRooms, caseFile.room) end
-end
-
 
 -- ==========================================================
 -- MASTER GAME ENGINE SYSTEM RESET INTERFACE
 -- ==========================================================
 local function resetGameEngine()
-totalAccusationsLeft = 4
-playerTilesLeft = 1000
-pixelRemainder = 0
-currentRoom = nil
-selectedIndex = 2
-scrollOffset = 0
-activeSpeaker = ""
-dialogueText = ""
-crankTicks = 0
-notepadCrankTicks = 0
-tutorialScrollY = 0
-checklist = createBlankNotepad()
-for i = 1, #suspects do
-suspects[i].notepad = createBlankNotepad()
-suspects[i].hand = {}
-suspects[i].assignedRoomName = nil
+-- main.lua (Lines 401 - 500)
+    totalAccusationsLeft = 4
+    playerTilesLeft = 1000
+    pixelRemainder = 0
+    currentRoom = nil
+    selectedIndex = 2
+    scrollOffset = 0
+    activeSpeaker = ""
+    dialogueText = ""
+    crankTicks = 0
+    notepadCrankTicks = 0
+    tutorialScrollY = 0
+    checklist = createBlankNotepad()
+    for i = 1, #suspects do
+        suspects[i].notepad = createBlankNotepad()
+        suspects[i].hand = {}
+        suspects[i].assignedRoomName = nil
+    end
+    masterKillers = { "Miss Scarlet", "Colonel Mustard", "Mrs. White", "Mr. Green", "Mrs. Peacock", "Professor Plum" }
+    masterWeapons = { "Candlestick", "Dagger", "Lead Pipe", "Revolver", "Rope", "Wrench" }
+    masterRooms = { "Kitchen", "Ballroom", "Conservatory", "Dining Room", "Game Room", "Library", "Lounge", "Hall", "Study" }
+    math.randomseed(playdate.getSecondsSinceEpoch())
+    math.random() math.random()
+    local winKillerIdx = math.random(1, #masterKillers)
+    local winWeaponIdx = math.random(1, #masterWeapons)
+    local winRoomIdx = math.random(1, #masterRooms)
+    caseFile.killer = table.remove(masterKillers, winKillerIdx)
+    caseFile.weapon = table.remove(masterWeapons, winWeaponIdx)
+    caseFile.room = table.remove(masterRooms, winRoomIdx)
+    local dealPool = {}
+    for i = 1, #masterKillers do table.insert(dealPool, masterKillers[i]) end
+    for i = 1, #masterWeapons do table.insert(dealPool, masterWeapons[i]) end
+    for i = 1, #masterRooms do table.insert(dealPool, masterRooms[i]) end
+    shuffleStrings(dealPool)
+    local totalParticipants = 1 + #suspects
+    for turn = 1, #dealPool do
+        local card = dealPool[turn]
+        local targetSeat = (turn - 1) % totalParticipants
+        if targetSeat == 0 then
+            crossOffCard(checklist, card)
+        else
+            local AI = suspects[targetSeat]
+            crossOffCard(AI.notepad, card)
+            table.insert(AI.hand, card)
+        end
+    end
+    print("=== CASE FILE HIDDEN ===")
+    print("Solution: " .. caseFile.killer .. " with the " .. caseFile.weapon .. " in the " .. caseFile.room)
+    local poolOfRooms = {}
+    for _, room in ipairs(rooms) do
+        table.insert(poolOfRooms, room.name)
+    end
+    shuffleTable(poolOfRooms)
+    for i, suspect in ipairs(suspects) do
+        local roomName = poolOfRooms[i]
+        suspect.assignedRoomName = roomName
+        for _, room in ipairs(rooms) do
+            if room.name == roomName then
+                local offset = innerRoomSafeSpots[roomName] or { x = 200, y = 100 }
+                suspect.worldX = room.x + offset.x
+                suspect.worldY = room.y + offset.y
+                break
+            end
+        end
+    end
+-- main.lua (Lines 501 - 600)
+    local chosenSpawnIndex = math.random(1, #startingSpawns)
+    local selectedSpawn = startingSpawns[chosenSpawnIndex]
+    playerX = selectedSpawn.x
+    playerY = selectedSpawn.y
 end
-masterKillers = { "Miss Scarlet", "Colonel Mustard", "Mrs. White", "Mr. Green", "Mrs. Peacock", "Professor Plum" }
-masterWeapons = { "Candlestick", "Dagger", "Lead Pipe", "Revolver", "Rope", "Wrench" }
-masterRooms = { "Kitchen", "Ballroom", "Conservatory", "Dining Room", "Game Room", "Library", "Lounge", "Hall", "Study" }
-math.randomseed(playdate.getSecondsSinceEpoch())
-math.random() math.random()
-local winKillerIdx = math.random(1, #masterKillers)
-local winWeaponIdx = math.random(1, #masterWeapons)
-local winRoomIdx = math.random(1, #masterRooms)
-caseFile.killer = table.remove(masterKillers, winKillerIdx)
-caseFile.weapon = table.remove(masterWeapons, winWeaponIdx)
-caseFile.room = table.remove(masterRooms, winRoomIdx)
-local dealPool = {}
-for i = 1, #masterKillers do table.insert(dealPool, masterKillers[i]) end
-for i = 1, #masterWeapons do table.insert(dealPool, masterWeapons[i]) end
-for i = 1, #masterRooms do table.insert(dealPool, masterRooms[i]) end
-shuffleStrings(dealPool)
-local totalParticipants = 1 + #suspects
-for turn = 1, #dealPool do
-local card = dealPool[turn]
-local targetSeat = (turn - 1) % totalParticipants
-if targetSeat == 0 then
-crossOffCard(checklist, card)
-else
-local AI = suspects[targetSeat]
-crossOffCard(AI.notepad, card)
-table.insert(AI.hand, card)
-end
-end
-print("=== CASE FILE HIDDEN ===")
-print("Solution: " .. caseFile.killer .. " with the " .. caseFile.weapon .. " in the " .. caseFile.room)
-local poolOfRooms = {}
-for _, room in ipairs(rooms) do
-table.insert(poolOfRooms, room.name)
-end
-shuffleTable(poolOfRooms)
-for i, suspect in ipairs(suspects) do
-local roomName = poolOfRooms[i]
-suspect.assignedRoomName = roomName
-for _, room in ipairs(rooms) do
-if room.name == roomName then
-local offset = innerRoomSafeSpots[roomName] or { x = 200, y = 100 }
-suspect.worldX = room.x + offset.x
-suspect.worldY = room.y + offset.y
-break
-end
-end
-end
-local chosenSpawnIndex = math.random(1, #startingSpawns)
-local selectedSpawn = startingSpawns[chosenSpawnIndex]
-playerX = selectedSpawn.x
-playerY = selectedSpawn.y
-end
+
 resetGameEngine()
+
 -- ==========================================================
 -- SYSTEM MENU INTEGRATION
 -- ==========================================================
 local menu = playdate.getSystemMenu()
-local pauseMenuItem, error = menu:addMenuItem("Pause Game", function()
-if gameState ~= "TITLE" and gameState ~= "GAME_OVER" and gameState ~= "PAUSE" and gameState ~= "TUTORIAL" then
-stateBeforePause = gameState
-gameState = "PAUSE"
-end
-end)
+
 local restartMenuItem, error = menu:addMenuItem("Restart Game", function()
-if gameMusic then gameMusic:stop() end
-resetGameEngine()
-gameState = "TITLE"
+    if gameMusic then gameMusic:stop() end
+    
+    -- Dynamic Cleanup: Clear Pause option if it was created during play
+    if pauseMenuItem then
+        local menuRef = playdate.getSystemMenu()
+        menuRef:removeMenuItem(pauseMenuItem)
+        pauseMenuItem = nil
+    end
+    
+    resetGameEngine()
+    gameState = "TITLE"
 end)
+
 local function isWalkable(x, y)
-local points = {
-{x = x, y = y},
-{x = x + playerSize - 1, y = y},
-{x = x, y = y + playerSize - 1},
-{x = x + playerSize - 1, y = y + playerSize - 1},
-{x = x + (playerSize / 2), y = y + (playerSize / 2)}
-}
-if gameState == "ROOM_VIEW" and currentRoom and currentRoom.runtimeMask then
-local maskW, maskH = currentRoom.runtimeMask:getSize()
-for _, pt in ipairs(points) do
-local localX = math.floor(pt.x - currentRoom.x)
-local localY = math.floor(pt.y - currentRoom.y)
-if localX < 0 or localX >= maskW or localY < 0 or localY >= maskH then
-return false
-else
-local color = currentRoom.runtimeMask:sample(localX, localY)
-if color == gfx.kColorWhite or color == 1 then
-if currentRoom.name == "Dining Room" and localX >= 255 and localX <= 260 then
-else
-return false
+    local points = {
+        {x = x, y = y},
+        {x = x + playerSize - 1, y = y},
+        {x = x, y = y + playerSize - 1},
+        {x = x + playerSize - 1, y = y + playerSize - 1},
+        {x = x + (playerSize / 2), y = y + (playerSize / 2)}
+    }
+    if gameState == "ROOM_VIEW" and currentRoom and currentRoom.runtimeMask then
+        local maskW, maskH = currentRoom.runtimeMask:getSize()
+        for _, pt in ipairs(points) do
+            local localX = math.floor(pt.x - currentRoom.x)
+            local localY = math.floor(pt.y - currentRoom.y)
+            if localX < 0 or localX >= maskW or localY < 0 or localY >= maskH then
+                return false
+            else
+                local color = currentRoom.runtimeMask:sample(localX, localY)
+                if color == gfx.kColorWhite or color == 1 then
+                    if currentRoom.name == "Dining Room" and localX >= 255 and localX <= 260 then
+                    else
+                        return false
+                    end
+                end
+            end
+        end
+    else
+        if maskImage then
+            local maskW, maskH = maskImage:getSize()
+            for _, pt in ipairs(points) do
+                local clampedX = math.max(0, math.min(maskW - 1, math.floor(pt.x)))
+                local clampedY = math.max(0, math.min(maskH - 1, math.floor(pt.y)))
+                local color = maskImage:sample(clampedX, clampedY)
+                if color == gfx.kColorWhite or color == 1 then
+                    return false
+                end
+            end
+        end
+    end
+    return true
 end
-end
-end
-end
-else
-if maskImage then
-local maskW, maskH = maskImage:getSize()
-for _, pt in ipairs(points) do
-local clampedX = math.max(0, math.min(maskW - 1, math.floor(pt.x)))
-local clampedY = math.max(0, math.min(maskH - 1, math.floor(pt.y)))
-local color = maskImage:sample(clampedX, clampedY)
-if color == gfx.kColorWhite or color == 1 then
-return false
-end
-end
-end
-end
-return true
-end
+
 local function checkRoomTransitions(px, py)
-if not currentRoom and math.abs(px - 233) <= 15 and math.abs(py - 138) <= 15 then
-for _, r in ipairs(rooms) do
-if r.name == "Study" then return r end
+    if not currentRoom and math.abs(px - 233) <= 15 and math.abs(py - 138) <= 15 then
+        for _, r in ipairs(rooms) do
+            if r.name == "Study" then return r end
+        end
+    end
+-- main.lua (Lines 601 - 700)
+    for _, room in ipairs(rooms) do
+        if px >= room.x and px <= (room.x + room.w) and py >= room.y and py <= (room.y + room.h) then
+            return room
+        end
+    end
+    return nil
 end
-end
-for _, room in ipairs(rooms) do
-if px >= room.x and px <= (room.x + room.w) and py >= room.y and py <= (room.y + room.h) then
-return room
-end
-end
-return nil
-end
+
 local function handleDpadInput()
-    -- 1. MASTER SAFETY GUARD (Excludes NOTEPAD from being blocked!)
+    -- MASTER SAFETY INPUT ROUTER (Excludes NOTEPAD state from absolute lockouts)
     if gameState == "TITLE" or gameState == "GAME_OVER" or gameState == "PAUSE" then
         return
     end
 
-    -- 2. NEW: FIXED D-PAD NAVIGATION FOR THE DETECTIVE NOTEPAD STATE
+    -- FIXED D-PAD LOGIC FOR DETECTIVE NOTEPAD VIEW
     if gameState == "NOTEPAD" then
         if playdate.buttonJustPressed(playdate.kButtonUp) then
             local prevIndex = selectedIndex
@@ -460,16 +476,15 @@ local function handleDpadInput()
             end
         end
 
-        -- Handle viewport window scrolling centering offsets for D-Pad rows
+        -- Keep active viewport scroll layout locked to item index bounds
         if selectedIndex - scrollOffset > 7 then
             scrollOffset = selectedIndex - 7
         elseif selectedIndex - scrollOffset < 2 then
             scrollOffset = math.max(0, selectedIndex - 2)
         end
-        return -- Handled notepad state, stop processing further character walking logic
+        return
     end
 
-    -- 3. EXISTING TUTORIAL HANDLING
     if gameState == "TUTORIAL" then
         if playdate.buttonIsPressed(playdate.kButtonUp) then
             tutorialScrollY = math.max(0, tutorialScrollY - 4)
@@ -478,319 +493,330 @@ local function handleDpadInput()
         end
         return
     end
-    
-    -- ... [The rest of your handleDpadInput continues into accuse choices and walking maps below]
-if gameState == "ACCUSE_WEAPON" then
-if playdate.buttonJustPressed(playdate.kButtonUp) then
-accuseWeaponIndex = accuseWeaponIndex - 1
-if accuseWeaponIndex < 1 then accuseWeaponIndex = #dynamicWeapons end
-elseif playdate.buttonJustPressed(playdate.kButtonDown) then
-accuseWeaponIndex = accuseWeaponIndex + 1
-if accuseWeaponIndex > #dynamicWeapons then accuseWeaponIndex = 1 end
+    if gameState == "ACCUSE_WEAPON" then
+        if playdate.buttonJustPressed(playdate.kButtonUp) then
+            accuseWeaponIndex = accuseWeaponIndex - 1
+            if accuseWeaponIndex < 1 then accuseWeaponIndex = #dynamicWeapons end
+        elseif playdate.buttonJustPressed(playdate.kButtonDown) then
+            accuseWeaponIndex = accuseWeaponIndex + 1
+            if accuseWeaponIndex > #dynamicWeapons then accuseWeaponIndex = 1 end
+        end
+    elseif gameState == "ACCUSE_ROOM" then
+        if playdate.buttonJustPressed(playdate.kButtonUp) then
+            accuseRoomIndex = accuseRoomIndex - 1
+            if accuseRoomIndex < 1 then accuseRoomIndex = #dynamicRooms end
+        elseif playdate.buttonJustPressed(playdate.kButtonDown) then
+-- main.lua (Lines 701 - 800)
+            accuseRoomIndex = accuseRoomIndex + 1
+            if accuseRoomIndex > #dynamicRooms then accuseRoomIndex = 1 end
+        end
+    elseif gameState == "MAP" or gameState == "ROOM_VIEW" then
+        local dx, dy = 0, 0
+        local buttonPressedThisFrame = false
+        if playerTilesLeft <= 0 and gameState ~= "REVEAL_ENVELOPE" then
+            gameState = "REVEAL_ENVELOPE"
+            dialogueText = string.format("GAME OVER")
+            return
+        end
+        if playdate.buttonJustPressed(playdate.kButtonUp) or
+            playdate.buttonJustPressed(playdate.kButtonDown) or
+            playdate.buttonJustPressed(playdate.kButtonLeft) or
+            playdate.buttonJustPressed(playdate.kButtonRight) then
+            buttonPressedThisFrame = true
+        end
+        if playerTilesLeft > 0 then
+            if playdate.buttonIsPressed(playdate.kButtonUp) then dy = -playerSpeed end
+            if playdate.buttonIsPressed(playdate.kButtonDown) then dy = playerSpeed end
+            if playdate.buttonIsPressed(playdate.kButtonLeft) then dx = -playerSpeed end
+            if playdate.buttonIsPressed(playdate.kButtonRight) then dx = playerSpeed end
+        end
+        local minX, maxX, minY, maxY
+        if gameState == "ROOM_VIEW" and currentRoom then
+            minX = currentRoom.x
+            maxX = currentRoom.x + 400 - playerSize
+            minY = currentRoom.y
+            maxY = currentRoom.y + 200 - playerSize
+        else
+            minX = 0
+            maxX = MAP_WIDTH - playerSize
+            minY = 0
+            maxY = MAP_HEIGHT - playerSize
+        end
+        if dx ~= 0 or dy ~= 0 then
+            local moved = false
+            if dx ~= 0 then
+                local targetX = playerX + dx
+                if targetX >= minX and targetX <= maxX then
+                    if isWalkable(targetX, playerY) then
+                        playerX = targetX
+                        moved = true
+                    end
+                end
+            end
+            if dy ~= 0 then
+                local targetY = playerY + dy
+                if targetY >= minY and targetY <= maxY then
+                    if isWalkable(playerX, targetY) then
+                        playerY = targetY
+                        moved = true
+                    end
+                end
+            end
+            if moved then
+                if buttonPressedThisFrame then
+                    playerTilesLeft = playerTilesLeft - 1
+                    pixelRemainder = 0
+                else
+                    pixelRemainder = pixelRemainder + playerSpeed
+                    if pixelRemainder >= 16 then
+                        playerTilesLeft = playerTilesLeft - 1
+                        pixelRemainder = pixelRemainder - 16
+                    end
+                end
+                if gameState == "MAP" then
+                    local newRoom = checkRoomTransitions(playerX, playerY)
+                    if newRoom then
+                        currentRoom = newRoom
+                        gameState = "ROOM_VIEW"
+-- main.lua (Lines 801 - 900)
+                        if currentRoom.name == "Dining Room" then
+                            if math.abs(playerX - 530) <= 15 and math.abs(playerY - 391) <= 15 then
+                                playerX = 638 + 12; playerY = 403
+                            elseif math.abs(playerX - 563) <= 15 and math.abs(playerY - 304) <= 15 then
+                                playerX = 674; playerY = 322 + 12
+                            else
+                                gameState = "MAP"; currentRoom = nil
+                            end
+                        elseif currentRoom.name == "Kitchen" then
+                            if math.abs(playerX - 617) <= 15 and math.abs(playerY - 555) <= 15 then
+                                playerX = 748; playerY = 590 + 12
+                            else
+                                gameState = "MAP"; currentRoom = nil
+                            end
+                        elseif currentRoom.name == "Ballroom" then
+                            if math.abs(playerX - 290) <= 15 and math.abs(playerY - 598) <= 15 then
+                                playerX = 409 + 12; playerY = 605
+                            elseif math.abs(playerX - 326) <= 15 and math.abs(playerY - 535) <= 20 then
+                                playerX = 436; playerY = 557 + 12
+                            elseif math.abs(playerX - 464) <= 15 and math.abs(playerY - 535) <= 20 then
+                                playerX = 525; playerY = 557 + 12
+                            elseif math.abs(playerX - 506) <= 15 and math.abs(playerY - 598) <= 15 then
+                                playerX = 562 - 12; playerY = 605
+                            else
+                                gameState = "MAP"; currentRoom = nil
+                            end
+                        elseif currentRoom.name == "Conservatory" then
+                            if math.abs(playerX - 210) <= 15 and math.abs(playerY - 598) <= 15 then
+                                playerX = 319 - 12; playerY = 635
+                            else
+                                gameState = "MAP"; currentRoom = nil
+                            end
+                        elseif currentRoom.name == "Game Room" then
+                            if math.abs(playerX - 207) <= 15 and math.abs(playerY - 478) <= 15 then
+                                playerX = 331 - 12; playerY = 512
+                            elseif math.abs(playerX - 90) <= 15 and math.abs(playerY - 385) <= 15 then
+                                playerX = 205; playerY = 419 + 12
+                            else
+                                gameState = "MAP"; currentRoom = nil
+                            end
+                        elseif currentRoom.name == "Library" then
+                            if math.abs(playerX - 147) <= 15 and math.abs(playerY - 337) <= 15 then
+                                playerX = 243; playerY = 384 - 12
+                            elseif math.abs(playerX - 243) <= 15 and math.abs(playerY - 274) <= 15 then
+                                playerX = 354 - 12; playerY = 309
+                            else
+                                gameState = "MAP"; currentRoom = nil
+                            end
+                        elseif currentRoom.name == "Study" then
+                            playerX = 371; playerY = 210 - 16
+                        elseif currentRoom.name == "Lounge" then
+                            if math.abs(playerX - 566) <= 15 and math.abs(playerY - 196) <= 15 then
+                                playerX = 660; playerY = 215 - 12
+                            else
+                                gameState = "MAP"; currentRoom = nil
+                            end
+                        elseif currentRoom.name == "Hall" then
+                            if math.abs(playerX - 398) <= 15 and math.abs(playerY - 220) <= 15 then
+                                playerX = 525; playerY = 222 - 12
+                            elseif math.abs(playerX - 323) <= 15 and math.abs(playerY - 157) <= 15 then
+                                playerX = 462 + 12; playerY = 174
+                            else
+                                gameState = "MAP"; currentRoom = nil
+                            end
+                        end
+                    end
+                elseif gameState == "ROOM_VIEW" and currentRoom then
+                    if currentRoom.name == "Dining Room" then
+-- main.lua (Lines 901 - 1000)
+                        if math.abs(playerX - 638) <= playerSpeed and math.abs(playerY - 403) <= 15 then
+                            gameState = "MAP"; currentRoom = nil; playerX = 530 - 12; playerY = 391
+                        elseif math.abs(playerX - 674) <= 15 and math.abs(playerY - 322) <= playerSpeed then
+                            gameState = "MAP"; currentRoom = nil; playerX = 563; playerY = 304 - 12
+                        end
+                    elseif currentRoom.name == "Kitchen" then
+                        if math.abs(playerX - 748) <= 15 and math.abs(playerY - 590) <= (playerSpeed + 2) then
+                            gameState = "MAP"; currentRoom = nil; playerX = 617; playerY = 555 - 12
+                        end
+                    elseif currentRoom.name == "Ballroom" then
+                        if math.abs(playerX - 409) <= playerSpeed and math.abs(playerY - 605) <= 15 then
+                            gameState = "MAP"; currentRoom = nil; playerX = 290 - 12; playerY = 598
+                        elseif math.abs(playerX - 436) <= 15 and math.abs(playerY - 557) <= playerSpeed then
+                            gameState = "MAP"; currentRoom = nil; playerX = 326; playerY = 535 - 12
+                        elseif math.abs(playerX - 525) <= 15 and math.abs(playerY - 557) <= playerSpeed then
+                            gameState = "MAP"; currentRoom = nil; playerX = 464; playerY = 535 - 12
+                        elseif math.abs(playerX - 562) <= playerSpeed and math.abs(playerY - 605) <= 15 then
+                            gameState = "MAP"; currentRoom = nil; playerX = 506 + 12; playerY = 598
+                        end
+                    elseif currentRoom.name == "Conservatory" then
+                        if math.abs(playerX - 319) <= playerSpeed and math.abs(playerY - 635) <= 15 then
+                            gameState = "MAP"; currentRoom = nil; playerX = 210 + 12; playerY = 598
+                        end
+                    elseif currentRoom.name == "Game Room" then
+                        if math.abs(playerX - 331) <= playerSpeed and math.abs(playerY - 512) <= 15 then
+                            gameState = "MAP"; currentRoom = nil; playerX = 207 + 12; playerY = 478
+                        elseif math.abs(playerX - 205) <= 15 and math.abs(playerY - 419) <= playerSpeed then
+                            gameState = "MAP"; currentRoom = nil; playerX = 90; playerY = 385 - 12
+                        end
+                    elseif currentRoom.name == "Library" then
+                        if math.abs(playerX - 243) <= 15 and math.abs(playerY - 384) <= (playerSpeed + 2) then
+                            gameState = "MAP"; currentRoom = nil; playerX = 147; playerY = 337 + 12
+                        elseif math.abs(playerX - 354) <= (playerSpeed + 2) and math.abs(playerY - 309) <= 15 then
+                            gameState = "MAP"; currentRoom = nil; playerX = 243 + 12; playerY = 274
+                        end
+                    elseif currentRoom.name == "Study" then
+                        if math.abs(playerX - 371) <= 15 and math.abs(playerY - 210) <= 15 then
+                            gameState = "MAP"; currentRoom = nil; playerX = 233; playerY = 138 + 16
+                        end
+                    elseif currentRoom.name == "Lounge" then
+                        if math.abs(playerX - 660) <= 15 and math.abs(playerY - 215) <= (playerSpeed + 2) then
+                            gameState = "MAP"; currentRoom = nil; playerX = 566; playerY = 196 + 12
+                        end
+                    elseif currentRoom.name == "Hall" then
+                        if math.abs(playerX - 525) <= 15 and math.abs(playerY - 222) <= (playerSpeed + 2) then
+                            gameState = "MAP"; currentRoom = nil; playerX = 398; playerY = 220 + 12
+                        elseif math.abs(playerX - 462) <= playerSpeed and math.abs(playerY - 174) <= 15 then
+                            gameState = "MAP"; currentRoom = nil; playerX = 323 - 12; playerY = 157
+                        end
+                    end
+                end
+                if currentRoom then
+                    for i = 1, #suspects do
+                        local suspect = suspects[i]
+                        if suspect.assignedRoomName == currentRoom.name then
+                            local distX = math.abs(playerX - suspect.worldX)
+                            local distY = math.abs(playerY - suspect.worldY)
+                            if distX <= 16 and distY <= 16 then
+                                activeSpeaker = suspect.name
+                                gameState = "DIALOGUE"
+-- main.lua (Lines 1001 - 1100)
+                                local unrevealedCards = {}
+                                if suspect.hand then
+                                    for idx, cardName in ipairs(suspect.hand) do
+                                        local humanDiscovered = false
+                                        for _, humanRow in ipairs(checklist) do
+                                            if humanRow.name == cardName and humanRow.checked then
+                                                humanDiscovered = true
+                                                break
+                                            end
+                                        end
+                                        if not humanDiscovered then
+                                            table.insert(unrevealedCards, cardName)
+                                        end
+                                    end
+                                end
+                                if #unrevealedCards > 0 then
+                                    local pickedCard = unrevealedCards[math.random(1, #unrevealedCards)]
+                                    dialogueText = string.format("I can prove that it wasn't %s.", pickedCard:upper())
+                                    for _, humanRow in ipairs(checklist) do
+                                        if humanRow.name == pickedCard then
+                                            humanRow.checked = true
+                                            break
+                                        end
+                                    end
+                                else
+                                    dialogueText = "I've already told you everything I know about this case."
+                                end
+                                break
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        cameraX = playerX - (SCREEN_WIDTH / 2) + (playerSize / 2)
+        if cameraX < 0 then cameraX = 0
+        elseif cameraX > (MAP_WIDTH - SCREEN_WIDTH) then cameraX = MAP_WIDTH - SCREEN_WIDTH end
+        cameraY = playerY - (SCREEN_HEIGHT / 2) + (playerSize / 2)
+        if cameraY < 0 then cameraY = 0
+        elseif cameraY > (MAP_HEIGHT - SCREEN_HEIGHT) then cameraY = MAP_HEIGHT - SCREEN_HEIGHT end
+    end
 end
-elseif gameState == "ACCUSE_ROOM" then
-if playdate.buttonJustPressed(playdate.kButtonUp) then
-accuseRoomIndex = accuseRoomIndex - 1
-if accuseRoomIndex < 1 then accuseRoomIndex = #dynamicRooms end
-elseif playdate.buttonJustPressed(playdate.kButtonDown) then
-accuseRoomIndex = accuseRoomIndex + 1
-if accuseRoomIndex > #dynamicRooms then accuseRoomIndex = 1 end
-end
-elseif gameState == "MAP" or gameState == "ROOM_VIEW" then
-local dx, dy = 0, 0
-local buttonPressedThisFrame = false
-if playerTilesLeft <= 0 and gameState ~= "REVEAL_ENVELOPE" then
-gameState = "REVEAL_ENVELOPE"
-dialogueText = string.format("GAME OVER")
-return
-end
-if playdate.buttonJustPressed(playdate.kButtonUp) or
-playdate.buttonJustPressed(playdate.kButtonDown) or
-playdate.buttonJustPressed(playdate.kButtonLeft) or
-playdate.buttonJustPressed(playdate.kButtonRight) then
-buttonPressedThisFrame = true
-end
-if playerTilesLeft > 0 then
-if playdate.buttonIsPressed(playdate.kButtonUp) then dy = -playerSpeed end
-if playdate.buttonIsPressed(playdate.kButtonDown) then dy = playerSpeed end
-if playdate.buttonIsPressed(playdate.kButtonLeft) then dx = -playerSpeed end
-if playdate.buttonIsPressed(playdate.kButtonRight) then dx = playerSpeed end
-end
-local minX, maxX, minY, maxY
-if gameState == "ROOM_VIEW" and currentRoom then
-minX = currentRoom.x
-maxX = currentRoom.x + 400 - playerSize
-minY = currentRoom.y
-maxY = currentRoom.y + 200 - playerSize
-else
-minX = 0
-maxX = MAP_WIDTH - playerSize
-minY = 0
-maxY = MAP_HEIGHT - playerSize
-end
-if dx ~= 0 or dy ~= 0 then
-local moved = false
-if dx ~= 0 then
-local targetX = playerX + dx
-if targetX >= minX and targetX <= maxX then
-if isWalkable(targetX, playerY) then
-playerX = targetX
-moved = true
-end
-end
-end
-if dy ~= 0 then
-local targetY = playerY + dy
-if targetY >= minY and targetY <= maxY then
-if isWalkable(playerX, targetY) then
-playerY = targetY
-moved = true
-end
-end
-end
-if moved then
-if buttonPressedThisFrame then
-playerTilesLeft = playerTilesLeft - 1
-pixelRemainder = 0
-else
-pixelRemainder = pixelRemainder + playerSpeed
-if pixelRemainder >= 16 then
-playerTilesLeft = playerTilesLeft - 1
-pixelRemainder = pixelRemainder - 16
-end
-end
-if gameState == "MAP" then
-local newRoom = checkRoomTransitions(playerX, playerY)
-if newRoom then
-currentRoom = newRoom
-gameState = "ROOM_VIEW"
-if currentRoom.name == "Dining Room" then
-if math.abs(playerX - 530) <= 15 and math.abs(playerY - 391) <= 15 then
-playerX = 638 + 12; playerY = 403
-elseif math.abs(playerX - 563) <= 15 and math.abs(playerY - 304) <= 15 then
-playerX = 674; playerY = 322 + 12
-else
-gameState = "MAP"; currentRoom = nil
-end
-elseif currentRoom.name == "Kitchen" then
-if math.abs(playerX - 617) <= 15 and math.abs(playerY - 555) <= 15 then
-playerX = 748; playerY = 590 + 12
-else
-gameState = "MAP"; currentRoom = nil
-end
-elseif currentRoom.name == "Ballroom" then
-if math.abs(playerX - 290) <= 15 and math.abs(playerY - 598) <= 15 then
-playerX = 409 + 12; playerY = 605
-elseif math.abs(playerX - 326) <= 15 and math.abs(playerY - 535) <= 20 then
-playerX = 436; playerY = 557 + 12
-elseif math.abs(playerX - 464) <= 15 and math.abs(playerY - 535) <= 20 then
-playerX = 525; playerY = 557 + 12
-elseif math.abs(playerX - 506) <= 15 and math.abs(playerY - 598) <= 15 then
-playerX = 562 - 12; playerY = 605
-else
-gameState = "MAP"; currentRoom = nil
-end
-elseif currentRoom.name == "Conservatory" then
-if math.abs(playerX - 210) <= 15 and math.abs(playerY - 598) <= 15 then
-playerX = 319 - 12; playerY = 635
-else
-gameState = "MAP"; currentRoom = nil
-end
-elseif currentRoom.name == "Game Room" then
-if math.abs(playerX - 207) <= 15 and math.abs(playerY - 478) <= 15 then
-playerX = 331 - 12; playerY = 512
-elseif math.abs(playerX - 90) <= 15 and math.abs(playerY - 385) <= 15 then
-playerX = 205; playerY = 419 + 12
-else
-gameState = "MAP"; currentRoom = nil
-end
-elseif currentRoom.name == "Library" then
-if math.abs(playerX - 147) <= 15 and math.abs(playerY - 337) <= 15 then
-playerX = 243; playerY = 384 - 12
-elseif math.abs(playerX - 243) <= 15 and math.abs(playerY - 274) <= 15 then
-playerX = 354 - 12; playerY = 309
-else
-gameState = "MAP"; currentRoom = nil
-end
-elseif currentRoom.name == "Study" then
-playerX = 371; playerY = 210 - 16
-elseif currentRoom.name == "Lounge" then
-if math.abs(playerX - 566) <= 15 and math.abs(playerY - 196) <= 15 then
-playerX = 660; playerY = 215 - 12
-else
-gameState = "MAP"; currentRoom = nil
-end
-elseif currentRoom.name == "Hall" then
-if math.abs(playerX - 398) <= 15 and math.abs(playerY - 220) <= 15 then
-playerX = 525; playerY = 222 - 12
-elseif math.abs(playerX - 323) <= 15 and math.abs(playerY - 157) <= 15 then
-playerX = 462 + 12; playerY = 174
-else
-gameState = "MAP"; currentRoom = nil
-end
-end
-end
-elseif gameState == "ROOM_VIEW" and currentRoom then
-if currentRoom.name == "Dining Room" then
-if math.abs(playerX - 638) <= playerSpeed and math.abs(playerY - 403) <= 15 then
-gameState = "MAP"; currentRoom = nil; playerX = 530 - 12; playerY = 391
-elseif math.abs(playerX - 674) <= 15 and math.abs(playerY - 322) <= playerSpeed then
-gameState = "MAP"; currentRoom = nil; playerX = 563; playerY = 304 - 12
-end
-elseif currentRoom.name == "Kitchen" then
-if math.abs(playerX - 748) <= 15 and math.abs(playerY - 590) <= (playerSpeed + 2) then
-gameState = "MAP"; currentRoom = nil; playerX = 617; playerY = 555 - 12
-end
-elseif currentRoom.name == "Ballroom" then
-if math.abs(playerX - 409) <= playerSpeed and math.abs(playerY - 605) <= 15 then
-gameState = "MAP"; currentRoom = nil; playerX = 290 - 12; playerY = 598
-elseif math.abs(playerX - 436) <= 15 and math.abs(playerY - 557) <= playerSpeed then
-gameState = "MAP"; currentRoom = nil; playerX = 326; playerY = 535 - 12
-elseif math.abs(playerX - 525) <= 15 and math.abs(playerY - 557) <= playerSpeed then
-gameState = "MAP"; currentRoom = nil; playerX = 464; playerY = 535 - 12
-elseif math.abs(playerX - 562) <= playerSpeed and math.abs(playerY - 605) <= 15 then
-gameState = "MAP"; currentRoom = nil; playerX = 506 + 12; playerY = 598
-end
-elseif currentRoom.name == "Conservatory" then
-if math.abs(playerX - 319) <= playerSpeed and math.abs(playerY - 635) <= 15 then
-gameState = "MAP"; currentRoom = nil; playerX = 210 + 12; playerY = 598
-end
-elseif currentRoom.name == "Game Room" then
-if math.abs(playerX - 331) <= playerSpeed and math.abs(playerY - 512) <= 15 then
-gameState = "MAP"; currentRoom = nil; playerX = 207 + 12; playerY = 478
-elseif math.abs(playerX - 205) <= 15 and math.abs(playerY - 419) <= playerSpeed then
-gameState = "MAP"; currentRoom = nil; playerX = 90; playerY = 385 - 12
-end
-elseif currentRoom.name == "Library" then
-if math.abs(playerX - 243) <= 15 and math.abs(playerY - 384) <= (playerSpeed + 2) then
-gameState = "MAP"; currentRoom = nil; playerX = 147; playerY = 337 + 12
-elseif math.abs(playerX - 354) <= (playerSpeed + 2) and math.abs(playerY - 309) <= 15 then
-gameState = "MAP"; currentRoom = nil; playerX = 243 + 12; playerY = 274
-end
-elseif currentRoom.name == "Study" then
-if math.abs(playerX - 371) <= 15 and math.abs(playerY - 210) <= 15 then
-gameState = "MAP"; currentRoom = nil; playerX = 233; playerY = 138 + 16
-end
-elseif currentRoom.name == "Lounge" then
-if math.abs(playerX - 660) <= 15 and math.abs(playerY - 215) <= (playerSpeed + 2) then
-gameState = "MAP"; currentRoom = nil; playerX = 566; playerY = 196 + 12
-end
-elseif currentRoom.name == "Hall" then
-if math.abs(playerX - 525) <= 15 and math.abs(playerY - 222) <= (playerSpeed + 2) then
-gameState = "MAP"; currentRoom = nil; playerX = 398; playerY = 220 + 12
-elseif math.abs(playerX - 462) <= playerSpeed and math.abs(playerY - 174) <= 15 then
-gameState = "MAP"; currentRoom = nil; playerX = 323 - 12; playerY = 157
-end
-end
-end
-if currentRoom then
-for i = 1, #suspects do
-local suspect = suspects[i]
-if suspect.assignedRoomName == currentRoom.name then
-local distX = math.abs(playerX - suspect.worldX)
-local distY = math.abs(playerY - suspect.worldY)
-if distX <= 16 and distY <= 16 then
-activeSpeaker = suspect.name
-gameState = "DIALOGUE"
-local unrevealedCards = {}
-if suspect.hand then
-for idx, cardName in ipairs(suspect.hand) do
-local humanDiscovered = false
-for _, humanRow in ipairs(checklist) do
-if humanRow.name == cardName and humanRow.checked then
-humanDiscovered = true
-break
-end
-end
-if not humanDiscovered then
-table.insert(unrevealedCards, cardName)
-end
-end
-end
-if #unrevealedCards > 0 then
-local pickedCard = unrevealedCards[math.random(1, #unrevealedCards)]
-dialogueText = string.format("I can prove that it wasn't %s.", pickedCard:upper())
-for _, humanRow in ipairs(checklist) do
-if humanRow.name == pickedCard then
-humanRow.checked = true
-break
-end
-end
-else
-dialogueText = "I've already told you everything I know about this case."
-end
-break
-end
-end
-end
-end
-end
-end
-cameraX = playerX - (SCREEN_WIDTH / 2) + (playerSize / 2)
-if cameraX < 0 then cameraX = 0
-elseif cameraX > (MAP_WIDTH - SCREEN_WIDTH) then cameraX = MAP_WIDTH - SCREEN_WIDTH end
-cameraY = playerY - (SCREEN_HEIGHT / 2) + (playerSize / 2)
-if cameraY < 0 then cameraY = 0
-elseif cameraY > (MAP_HEIGHT - SCREEN_HEIGHT) then cameraY = MAP_HEIGHT - SCREEN_HEIGHT end
-end
-end
+
 local function handleCrankInput()
-local crankChange = playdate.getCrankChange()
-if gameState == "TUTORIAL" then
-if not playdate.isCrankDocked() then
-tutorialScrollY = math.max(0, math.min(tutorialMaxScroll, tutorialScrollY + (crankChange * 0.8)))
+    local crankChange = playdate.getCrankChange()
+    if gameState == "TUTORIAL" then
+        if not playdate.isCrankDocked() then
+            tutorialScrollY = math.max(0, math.min(tutorialMaxScroll, tutorialScrollY + (crankChange * 0.8)))
+        end
+        return
+    end
+    if playdate.isCrankDocked() then
+        if gameState == "MAP_FULL" then gameState = "MAP" end
+        crankTicks = 0
+        notepadCrankTicks = 0
+        return
+    end
+    if gameState == "NOTEPAD" then
+        notepadCrankTicks = notepadCrankTicks + crankChange
+        if notepadCrankTicks > NOTEPAD_CRANK_THRESHOLD then
+            local nextIndex = selectedIndex
+            local found = false
+            while nextIndex < #checklist do
+                nextIndex = nextIndex + 1
+                if not checklist[nextIndex].isHeader then
+                    found = true
+                    break
+                end
+            end
+            if found then 
+                selectedIndex = nextIndex 
+                if scrollSound then scrollSound:play() end
+            end
+            notepadCrankTicks = 0
+        elseif notepadCrankTicks < -NOTEPAD_CRANK_THRESHOLD then
+            local prevIndex = selectedIndex
+            local found = false
+-- main.lua (Lines 1101 - 1200)
+            while prevIndex > 1 do
+                prevIndex = prevIndex - 1
+                if not checklist[prevIndex].isHeader then
+                    found = true
+                    break
+                end
+            end
+            if found then 
+                selectedIndex = prevIndex 
+                if scrollSound then scrollSound:play() end
+            end
+            notepadCrankTicks = 0
+        end
+        if selectedIndex - scrollOffset > 7 then
+            scrollOffset = selectedIndex - 7
+        elseif selectedIndex - scrollOffset < 2 then
+            scrollOffset = math.max(0, selectedIndex - 2)
+        end
+    elseif gameState == "MAP" or gameState == "MAP_FULL" then
+        crankTicks = crankTicks + crankChange
+        if crankTicks > CRANK_THRESHOLD then
+            gameState = "MAP_FULL"
+            crankTicks = 0
+        elseif crankTicks < -CRANK_THRESHOLD then
+            gameState = "MAP"
+            crankTicks = 0
+        end
+    end
 end
-return
-end
-if playdate.isCrankDocked() then
-if gameState == "MAP_FULL" then gameState = "MAP" end
-crankTicks = 0
-notepadCrankTicks = 0
-return
-end
-if gameState == "NOTEPAD" then
-notepadCrankTicks = notepadCrankTicks + crankChange
-if notepadCrankTicks > NOTEPAD_CRANK_THRESHOLD then
-local nextIndex = selectedIndex
-local found = false
-while nextIndex < #checklist do
-nextIndex = nextIndex + 1
-if not checklist[nextIndex].isHeader then
-found = true
-break
-end
-end
-if found then selectedIndex = nextIndex end
-notepadCrankTicks = 0
-elseif notepadCrankTicks < -NOTEPAD_CRANK_THRESHOLD then
-local prevIndex = selectedIndex
-local found = false
-while prevIndex > 1 do
-prevIndex = prevIndex - 1
-if not checklist[prevIndex].isHeader then
-found = true
-break
-end
-end
-if found then selectedIndex = prevIndex end
-notepadCrankTicks = 0
-end
-if selectedIndex - scrollOffset > 7 then
-scrollOffset = selectedIndex - 7
-elseif selectedIndex - scrollOffset < 2 then
-scrollOffset = math.max(0, selectedIndex - 2)
-end
-elseif gameState == "MAP" or gameState == "MAP_FULL" then
-crankTicks = crankTicks + crankChange
-if crankTicks > CRANK_THRESHOLD then
-gameState = "MAP_FULL"
-crankTicks = 0
-elseif crankTicks < -CRANK_THRESHOLD then
-gameState = "MAP"
-crankTicks = 0
-end
-end
-end
+
 function playdate.BButtonDown()
     if gameState == "PAUSE" then
         gameState = stateBeforePause
@@ -805,8 +831,7 @@ function playdate.BButtonDown()
             if suspects[i].name == activeSpeaker then shiftingSuspect = suspects[i]; break end
         end
         
-        -- FIXED SOUND BOUNDARY GUARD: Only move them and play the escape sound 
-        -- if they are actually still physically assigned to the player's current room!
+        -- FIXED SOUND ACCUSATION ECHO GUARD: Only shift coordinates if they haven't fled yet!
         if shiftingSuspect and currentRoom and shiftingSuspect.assignedRoomName == currentRoom.name then
             local emptyRooms = {}
             for r = 1, #rooms do
@@ -824,87 +849,94 @@ function playdate.BButtonDown()
                 shiftingSuspect.worldX = chosenRoom.x + offset.x
                 shiftingSuspect.worldY = chosenRoom.y + offset.y
                 
-                -- Only plays audio if they hadn't vanished yet!
+                -- Play escape cue safely on normal questioning dismissal
                 if fleeSound then fleeSound:play() end
             end
         end
-        
-        -- Smoothly close the text screen without double-playing audio
         gameState = "ROOM_VIEW"
         activeSpeaker = ""
         dialogueText = ""
-elseif gameState == "ACCUSE_CONFIRM" then
-gameState = "DIALOGUE"
-elseif gameState == "ACCUSE_WEAPON" then
-gameState = "ACCUSE_CONFIRM"
-elseif gameState == "ACCUSE_ROOM" then
-gameState = "ACCUSE_WEAPON"
-elseif gameState == "ACCUSE_SUMMARY" then
-gameState = "ACCUSE_ROOM"
-elseif gameState == "NOTEPAD" then
-gameState = stateBeforeNotepad
-else
-if gameState == "MAP" or gameState == "ROOM_VIEW" then
-stateBeforeNotepad = gameState
-gameState = "NOTEPAD"
-notepadCrankTicks = 0
+    elseif gameState == "ACCUSE_CONFIRM" then
+        gameState = "DIALOGUE"
+    elseif gameState == "ACCUSE_WEAPON" then
+        gameState = "ACCUSE_CONFIRM"
+    elseif gameState == "ACCUSE_ROOM" then
+        gameState = "ACCUSE_WEAPON"
+    elseif gameState == "ACCUSE_SUMMARY" then
+        gameState = "ACCUSE_ROOM"
+    elseif gameState == "NOTEPAD" then
+        gameState = stateBeforeNotepad
+    else
+        if gameState == "MAP" or gameState == "ROOM_VIEW" then
+            stateBeforeNotepad = gameState
+            gameState = "NOTEPAD"
+            notepadCrankTicks = 0
+        end
+    end
 end
-end
-end
+-- main.lua (Lines 1201 - 1300)
 function playdate.AButtonDown()
-if gameState == "PAUSE" then
-return
-end
-if gameState == "GAME_OVER" then
-if gameMusic then gameMusic:stop() end
-resetGameEngine()
-gameState = "TITLE"
-return
-end
-if gameState == "TITLE" then
-gameState = "TUTORIAL"
-return
-end
-if gameState == "TUTORIAL" then
-if titleMusic then titleMusic:stop() end
-if gameMusic and not gameMusic:isPlaying() then
-gameMusic:play(0)
-end
-gameState = "MAP"
-return
-end
-if gameState == "NOTEPAD" then
-local currentItem = checklist[selectedIndex]
-if currentItem and not currentItem.isHeader then
-currentItem.checked = not currentItem.checked
-end
+    if gameState == "PAUSE" then
+        return
+    end
+    if gameState == "GAME_OVER" then
+        if gameMusic then gameMusic:stop() end
+        resetGameEngine()
+        gameState = "TITLE"
+        return
+    end
+    if gameState == "TITLE" then
+        gameState = "TUTORIAL"
+        return
+    end
+    if gameState == "TUTORIAL" then
+        if titleMusic then titleMusic:stop() end
+        if gameMusic and not gameMusic:isPlaying() then
+            gameMusic:play(0)
+        end
+        
+        -- DYNAMIC MENU LIFE HOOK: Construct pause menu option ONLY after the tutorial ends!
+        if not pauseMenuItem then
+            local menuRef = playdate.getSystemMenu()
+            pauseMenuItem, error = menuRef:addMenuItem("Pause Game", function()
+                if gameState ~= "TITLE" and gameState ~= "GAME_OVER" and gameState ~= "PAUSE" and gameState ~= "TUTORIAL" then
+                    stateBeforePause = gameState
+                    gameState = "PAUSE"
+                end
+            end)
+        end
+        
+        gameState = "MAP"
+        return
+    end
+    if gameState == "NOTEPAD" then
+        -- HARD LOCK NOTEPAD EDITS: Clicking A inside notebook now does completely nothing!
+        return 
     elseif gameState == "DIALOGUE" then
-        -- LOOPHOLE EXCLUSION GUARD: Extract active suspect reference data
         local targetedSuspect = nil
         for i = 1, #suspects do
             if suspects[i].name == activeSpeaker then targetedSuspect = suspects[i]; break end
         end
         
-        -- COMPLETE INPUT BLOCK: Refuse accusation if the suspect is proven innocent 
-        -- OR if they have physically fled the room (their assigned room no longer matches currentRoom)!
+        -- COMPLETE BUTTON LOCK EXCLUSION: Refuse accuse sequence if suspect has already fled!
         if isCrossedOff(activeSpeaker) or (targetedSuspect and currentRoom and targetedSuspect.assignedRoomName ~= currentRoom.name) then
-            return -- Completely ignores the A button press!
+            return
         else
             populateDynamicLists()
             gameState = "ACCUSE_CONFIRM"
         end
-elseif gameState == "ACCUSE_CONFIRM" then
-accuseWeaponIndex = 1
-gameState = "ACCUSE_WEAPON"
-elseif gameState == "ACCUSE_WEAPON" then
-finalAccuseWeapon = dynamicWeapons[accuseWeaponIndex]
-accuseRoomIndex = 1
-gameState = "ACCUSE_ROOM"
-elseif gameState == "ACCUSE_ROOM" then
-finalAccuseRoom = dynamicRooms[accuseRoomIndex]
-gameState = "ACCUSE_SUMMARY"
-elseif gameState == "REVEAL_ENVELOPE" then
-gameState = "GAME_OVER"
+    elseif gameState == "ACCUSE_CONFIRM" then
+        accuseWeaponIndex = 1
+        gameState = "ACCUSE_WEAPON"
+    elseif gameState == "ACCUSE_WEAPON" then
+        finalAccuseWeapon = dynamicWeapons[accuseWeaponIndex]
+        accuseRoomIndex = 1
+        gameState = "ACCUSE_ROOM"
+    elseif gameState == "ACCUSE_ROOM" then
+        finalAccuseRoom = dynamicRooms[accuseRoomIndex]
+        gameState = "ACCUSE_SUMMARY"
+    elseif gameState == "REVEAL_ENVELOPE" then
+        gameState = "GAME_OVER"
     elseif gameState == "ACCUSE_SUMMARY" then
         if activeSpeaker == caseFile.killer and finalAccuseWeapon == caseFile.weapon and finalAccuseRoom == caseFile.room then
             dialogueText = "CORRECT! You solved the case! You found the true killer, weapon, and crime scene."
@@ -913,7 +945,7 @@ gameState = "GAME_OVER"
         else
             totalAccusationsLeft = totalAccusationsLeft - 1
             
-            -- NEW: Instantly force the falsely accused suspect to vanish to another room
+            -- SUSPECT FAILURE FLIGHT: Force accused suspect to run immediately on an incorrect guess
             local shiftingSuspect = nil
             for i = 1, #suspects do
                 if suspects[i].name == activeSpeaker then shiftingSuspect = suspects[i]; break end
@@ -928,6 +960,7 @@ gameState = "GAME_OVER"
                     end
                     if not isOccupied then table.insert(emptyRooms, rooms[r]) end
                 end
+-- main.lua (Lines 1301 - 1400)
                 if #emptyRooms > 0 then
                     local chosenRoom = emptyRooms[math.random(1, #emptyRooms)]
                     shiftingSuspect.assignedRoomName = chosenRoom.name
@@ -935,7 +968,7 @@ gameState = "GAME_OVER"
                     shiftingSuspect.worldX = chosenRoom.x + offset.x
                     shiftingSuspect.worldY = chosenRoom.y + offset.y
                     
-                    -- Play your escape audio clip to signal they left
+                    -- Fire matching flight sound immediately
                     if fleeSound then fleeSound:play() end
                 end
             end
@@ -948,200 +981,206 @@ gameState = "GAME_OVER"
                 dialogueText = string.format("INCORRECT ACCUSATION! %i attempts remain.", totalAccusationsLeft)
                 gameState = "DIALOGUE"
             end
-        end -- <--- Closes your active (activeSpeaker == caseFile.killer) check logic
-    end -- <--- Closes your active (gameState == "ACCUSE_SUMMARY") check logic
-end -- <--- Closes the master function playdate.AButtonDown() loop block cleanly
+        end
+    end
+end
+
 -- Set scale factor once globally
 playdate.display.setScale(1)
 -- ==========================================================
 -- MAIN ENGINE UPDATE LOOP (KEEP AT THE VERY BOTTOM OF FILE)
 -- ==========================================================
 function playdate.update()
-gfx.clear()
-handleDpadInput()
-handleCrankInput()
-if gameState == "TITLE" then
-if titleMusic and not titleMusic:isPlaying() then
-titleMusic:play(0)
-end
-if titleImage then
-titleImage:draw(0, 0)
-else
-gfx.setColor(gfx.kColorBlack)
-gfx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
-gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
-gfx.drawTextAligned("MANSION MURDER MYSTERY", SCREEN_WIDTH / 2, 80, gfx.kTextAlignmentCenter)
-end
-gfx.setImageDrawMode(gfx.kDrawModeFillBlack)
-gfx.drawTextAligned("Press (A) to start", SCREEN_WIDTH / 3, SCREEN_HEIGHT - 45, gfx.kTextAlignmentCenter)
-gfx.setImageDrawMode(gfx.kDrawModeCopy)
-elseif gameState == "TUTORIAL" then
-gfx.setColor(gfx.kColorBlack)
-gfx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
-gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
--- Header (Centered, no background overlay block) [1]
-gfx.drawTextAligned("TUTORIAL", SCREEN_WIDTH / 2, 16, gfx.kTextAlignmentCenter)
-gfx.setColor(gfx.kColorWhite)
-gfx.fillRect(20, 36, SCREEN_WIDTH - 40, 1)
--- Scrolling text layout viewport boundary masks (Pushed context lower) [1]
-gfx.setClipRect(20, 44, SCREEN_WIDTH - 40, 144)
-local drawY = 48 - tutorialScrollY
-local wrapW = SCREEN_WIDTH - 64 -- Safe wrapping width preventing overflow
--- FIXED: Body Content items now use drawTextInRect with auto-wrap boundaries [1]
--- MISSION OBJECTIVE SECTION
-gfx.drawText("MISSION OBJECTIVE:", 24, drawY)
-gfx.drawText("Find the hidden combination of Killer, Weapon,", 24, drawY + 18)
-gfx.drawText("and Room sealed inside the secret envelope.", 24, drawY + 34)
--- STEP BUDGET SECTION
-gfx.drawText("STEP BUDGET:", 24, drawY + 68)
-gfx.drawText("You begin with 1000 steps. Moving subtracts", 24, drawY + 86)
-gfx.drawText("steps from your pool automatically.", 24, drawY + 102)
-gfx.drawText("If steps hit 0 before you solve it, you lose!", 24, drawY + 118)
--- INVESTIGATION CONTROLS SECTION
-gfx.drawText("INVESTIGATION CONTROLS:", 24, drawY + 152)
-gfx.drawText("- D-Pad: Move character through corridors.", 24, drawY + 170)
-gfx.drawText("- Crank: Turn crank to open the Full Map", 24, drawY + 186)
-gfx.drawText(" and scroll through the Notebook checklist.", 24, drawY + 202)
-gfx.drawText("- (B) Button: Open/Close your Notepad log.", 24, drawY + 218)
-gfx.drawText("- (A) Button: Confirm choices or accuse.", 24, drawY + 234)
--- DETECTION TIPS SECTION
-gfx.drawText("DETECTION TIPS:", 24, drawY + 268)
-gfx.drawText("Walk up to suspects inside rooms. They will", 24, drawY + 286)
-gfx.drawText("show you structural clues to automatically", 24, drawY + 302)
-gfx.drawText("cross proven false entries off your notepad.", 24, drawY + 318)
-gfx.clearClipRect()
--- Footer Prompt (Uniform background, no blocking box overlays) [1]
-gfx.fillRect(20, 194, SCREEN_WIDTH - 40, 1)
-if math.floor(playdate.getElapsedTime() * 3) % 2 == 0 then
-gfx.drawTextAligned("PRESS (A) TO START", SCREEN_WIDTH / 3, 206, gfx.kTextAlignmentCenter)
-end
--- Dithered side layout vertical tracking scroll thumb indicator bar [1]
-local scrollPercentage = tutorialScrollY / tutorialMaxScroll
-local barY = 44 + (scrollPercentage * 125)
-gfx.fillRect(SCREEN_WIDTH - 16, barY, 3, 14)
-gfx.setImageDrawMode(gfx.kDrawModeCopy)
-elseif gameState == "MAP" then
-if roomBackgrounds.mansion then
-roomBackgrounds.mansion:draw(-cameraX, -cameraY)
-end
-if playerSpriteImage then
-playerSpriteImage:draw(playerX - cameraX, playerY - cameraY)
-else
-gfx.setColor(gfx.kColorWhite)
-gfx.fillEllipseInRect(playerX - cameraX, playerY - cameraY, playerSize, playerSize)
-gfx.setColor(gfx.kColorBlack)
-gfx.drawEllipseInRect(playerX - cameraX, playerY - cameraY, playerSize, playerSize)
-end
-gfx.setColor(gfx.kColorBlack)
-gfx.fillRect(0, 0, SCREEN_WIDTH, 20)
-gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
-gfx.drawText(string.format("STEPS: %i | ACCUSATIONS: %i", playerTilesLeft, totalAccusationsLeft), 10, 2)
-gfx.setColor(gfx.kColorBlack)
-gfx.fillRect(0, SCREEN_HEIGHT - 20, SCREEN_WIDTH, 20)
-local roomString = "Path"
-if currentRoom then
-roomString = string.format("Room: %s", currentRoom.name)
-elseif playerTilesLeft == 0 then
-roomString = "OUT OF STEPS!"
-end
-local bottomHudText = string.format("%s | X: %i, Y: %i", roomString, playerX, playerY)
-gfx.drawText(bottomHudText, 10, SCREEN_HEIGHT - 18)
-gfx.setImageDrawMode(gfx.kDrawModeCopy)
-elseif gameState == "MAP_FULL" then
-if roomBackgrounds.board then
-local boardWidth, boardHeight = roomBackgrounds.board:getSize()
-local centeredX = (SCREEN_WIDTH - boardWidth) / 2
-local centeredY = (SCREEN_HEIGHT - boardHeight) / 2
-roomBackgrounds.board:draw(centeredX, centeredY)
-local percentX = playerX / MAP_WIDTH
-local percentY = playerY / MAP_HEIGHT
-local targetX = centeredX + (percentX * boardWidth) - (playerSize / 2)
-local targetY = centeredY + (percentY * boardHeight) - (playerSize / 2)
-if math.floor(playdate.getElapsedTime() * 4) % 2 == 0 then
-gfx.setColor(gfx.kColorWhite)
-gfx.fillEllipseInRect(targetX, targetY, playerSize / 2, playerSize / 2)
-gfx.setColor(gfx.kColorBlack)
-gfx.drawEllipseInRect(targetX - 2, targetY - 2, playerSize + 4, playerSize + 4)
-else
-gfx.setColor(gfx.kColorBlack)
-gfx.fillEllipseInRect(targetX, targetY, playerSize / 2, playerSize / 2)
-gfx.setColor(gfx.kColorWhite)
-gfx.drawEllipseInRect(targetX, targetY, playerSize / 2, playerSize / 2)
-end
-end
-elseif gameState == "ROOM_VIEW" then
-if currentRoom and currentRoom.img then
-currentRoom.img:draw(0, 20)
-else
-gfx.drawText("Error: Room asset missing!", 20, 20)
-end
-if currentRoom then
-for i = 1, #suspects do
-local suspect = suspects[i]
-if suspect.assignedRoomName == currentRoom.name then
-local localSuspectX = suspect.worldX - currentRoom.x
-local localSuspectY = (suspect.worldY - currentRoom.y) + 20
-if suspect.img then
-suspect.img:draw(localSuspectX, localSuspectY)
-else
-gfx.setColor(gfx.kColorBlack)
-gfx.fillEllipseInRect(localSuspectX, localSuspectY, playerSize, playerSize)
-gfx.setColor(gfx.kColorWhite)
-gfx.drawEllipseInRect(localSuspectX, localSuspectY, playerSize, playerSize)
-end
-end
-end
-end
-local localPlayerX = 200
-local localPlayerY = 120
-if currentRoom then
-localPlayerX = playerX - currentRoom.x
-localPlayerY = (playerY - currentRoom.y) + 20
-end
-if playerSpriteImage then
-playerSpriteImage:draw(localPlayerX, localPlayerY)
-else
-gfx.setColor(gfx.kColorWhite)
-gfx.fillEllipseInRect(localPlayerX, localPlayerY, playerSize, playerSize)
-gfx.setColor(gfx.kColorBlack)
-gfx.drawEllipseInRect(localPlayerX, localPlayerY, playerSize, playerSize)
-end
-gfx.setColor(gfx.kColorBlack)
-gfx.fillRect(0, 0, SCREEN_WIDTH, 20)
-gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
-gfx.drawText(string.format("STEPS: %i | ACCUSATIONS: %i", playerTilesLeft, totalAccusationsLeft), 10, 2)
-gfx.setColor(gfx.kColorBlack)
-gfx.fillRect(0, SCREEN_HEIGHT - 20, SCREEN_WIDTH, 20)
-local roomName = currentRoom and currentRoom.name or "Unknown"
-local debugText = string.format("%s | World: %i,%i | Room: %i,%i", roomName, playerX, playerY, localPlayerX, localPlayerY - 20)
-gfx.drawText(debugText, 6, SCREEN_HEIGHT - 18)
-gfx.setImageDrawMode(gfx.kDrawModeCopy)
-elseif gameState == "NOTEPAD" then
-gfx.setImageDrawMode(gfx.kDrawModeCopy)
-gfx.setColor(gfx.kColorBlack)
-gfx.drawText("DETECTIVE NOTEPAD", 125, 8)
-gfx.drawLine(20, 24, 380, 24)
-local maxRows = 8
-for i = 1, maxRows do
-local itemIndex = i + scrollOffset
-if itemIndex <= #checklist then
-local currentY = 32 + ((i - 1) * 22)
-local item = checklist[itemIndex]
-if item.isHeader then
-gfx.drawText(item.category, 120, currentY)
-else
-if itemIndex == selectedIndex then
-gfx.drawText("->", 15, currentY)
-end
-gfx.drawRect(45, currentY + 2, 11, 11)
-if item.checked then
-gfx.drawText("X", 47, currentY - 1)
-gfx.drawLine(65, currentY + 7, 300, currentY + 7)
-end
-gfx.drawText(item.name, 65, currentY)
-end
-end
-end
+    gfx.clear()
+    handleDpadInput()
+    handleCrankInput()
+    if gameState == "TITLE" then
+        if titleMusic and not titleMusic:isPlaying() then
+            titleMusic:play(0)
+        end
+        if titleImage then
+            titleImage:draw(0, 0)
+        else
+            gfx.setColor(gfx.kColorBlack)
+            gfx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
+            gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
+            gfx.drawTextAligned("MANSION MURDER MYSTERY", SCREEN_WIDTH / 2, 80, gfx.kTextAlignmentCenter)
+        end
+        gfx.setImageDrawMode(gfx.kDrawModeFillBlack)
+        gfx.drawTextAligned("Press (A) to start", SCREEN_WIDTH / 3, SCREEN_HEIGHT - 45, gfx.kTextAlignmentCenter)
+        gfx.setImageDrawMode(gfx.kDrawModeCopy)
+    elseif gameState == "TUTORIAL" then
+        gfx.setColor(gfx.kColorBlack)
+        gfx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
+        gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
+        -- Header (Centered, no background overlay block)
+        gfx.drawTextAligned("TUTORIAL", SCREEN_WIDTH / 2, 16, gfx.kTextAlignmentCenter)
+        gfx.setColor(gfx.kColorWhite)
+        gfx.fillRect(20, 36, SCREEN_WIDTH - 40, 1)
+        -- Scrolling text layout viewport boundary masks (Pushed context lower)
+        gfx.setClipRect(20, 44, SCREEN_WIDTH - 40, 144)
+        local drawY = 48 - tutorialScrollY
+        local wrapW = SCREEN_WIDTH - 64 -- Safe wrapping width preventing overflow
+        -- Body Content items use drawTextInRect with auto-wrap boundaries
+        -- MISSION OBJECTIVE SECTION
+        gfx.drawText("MISSION OBJECTIVE:", 24, drawY)
+        gfx.drawText("Find the hidden combination of Killer, Weapon,", 24, drawY + 18)
+        gfx.drawText("and Room sealed inside the secret envelope.", 24, drawY + 34)
+        
+        -- STEP BUDGET SECTION
+        gfx.drawText("STEP BUDGET:", 24, drawY + 68)
+        gfx.drawText("You begin with 1000 steps. Moving subtracts", 24, drawY + 86)
+        gfx.drawText("steps from your pool automatically.", 24, drawY + 102)
+        gfx.drawText("If steps hit 0 before you solve it, you lose!", 24, drawY + 118)
+-- main.lua (Lines 1401 - 1500)
+        -- INVESTIGATION CONTROLS SECTION
+        gfx.drawText("INVESTIGATION CONTROLS:", 24, drawY + 152)
+        gfx.drawText("- D-Pad: Move character through corridors.", 24, drawY + 170)
+        gfx.drawText("- Crank: Turn crank to open the Full Map", 24, drawY + 186)
+        gfx.drawText("  and scroll through the Notebook checklist.", 24, drawY + 202)
+        gfx.drawText("- (B) Button: Open/Close your Notepad log.", 24, drawY + 218)
+        gfx.drawText("- (A) Button: Confirm choices or accuse.", 24, drawY + 234)
+       
+        -- DETECTION TIPS SECTION
+        gfx.drawText("DETECTION TIPS:", 24, drawY + 268)
+        gfx.drawText("Walk up to suspects inside rooms. They will", 24, drawY + 286)
+        gfx.drawText("show you structural clues to automatically", 24, drawY + 302)
+        gfx.drawText("cross proven false entries off your notepad.", 24, drawY + 318)
+        
+        gfx.clearClipRect()
+       
+        -- Footer Prompt (Uniform background, no blocking box overlays)
+        gfx.fillRect(20, 194, SCREEN_WIDTH - 40, 1)
+        if math.floor(playdate.getElapsedTime() * 3) % 2 == 0 then
+            gfx.drawTextAligned("PRESS (A) TO START", SCREEN_WIDTH / 3, 206, gfx.kTextAlignmentCenter)
+        end
+        -- Dithered side layout vertical tracking scroll thumb indicator bar
+        local scrollPercentage = tutorialScrollY / tutorialMaxScroll
+        local barY = 44 + (scrollPercentage * 125)
+        gfx.fillRect(SCREEN_WIDTH - 16, barY, 3, 14)
+        gfx.setImageDrawMode(gfx.kDrawModeCopy)
+    elseif gameState == "MAP" then
+        if roomBackgrounds.mansion then
+            roomBackgrounds.mansion:draw(-cameraX, -cameraY)
+        end
+        if playerSpriteImage then
+            playerSpriteImage:draw(playerX - cameraX, playerY - cameraY)
+        else
+            gfx.setColor(gfx.kColorWhite)
+            gfx.fillEllipseInRect(playerX - cameraX, playerY - cameraY, playerSize, playerSize)
+            gfx.setColor(gfx.kColorBlack)
+            gfx.drawEllipseInRect(playerX - cameraX, playerY - cameraY, playerSize, playerSize)
+        end
+        gfx.setColor(gfx.kColorBlack)
+        gfx.fillRect(0, 0, SCREEN_WIDTH, 20)
+        gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
+        gfx.drawText(string.format("STEPS: %i | ACCUSATIONS: %i", playerTilesLeft, totalAccusationsLeft), 10, 2)
+        gfx.setColor(gfx.kColorBlack)
+        gfx.fillRect(0, SCREEN_HEIGHT - 20, SCREEN_WIDTH, 20)
+        local roomString = "Path"
+        if currentRoom then
+            roomString = string.format("Room: %s", currentRoom.name)
+        elseif playerTilesLeft == 0 then
+            roomString = "OUT OF STEPS!"
+        end
+        local bottomHudText = string.format("%s | X: %i, Y: %i", roomString, playerX, playerY)
+        gfx.drawText(bottomHudText, 10, SCREEN_HEIGHT - 18)
+        gfx.setImageDrawMode(gfx.kDrawModeCopy)
+    elseif gameState == "MAP_FULL" then
+        if roomBackgrounds.board then
+            local boardWidth, boardHeight = roomBackgrounds.board:getSize()
+            local centeredX = (SCREEN_WIDTH - boardWidth) / 2
+            local centeredY = (SCREEN_HEIGHT - boardHeight) / 2
+            roomBackgrounds.board:draw(centeredX, centeredY)
+            local percentX = playerX / MAP_WIDTH
+            local percentY = playerY / MAP_HEIGHT
+            local targetX = centeredX + (percentX * boardWidth) - (playerSize / 2)
+            local targetY = centeredY + (percentY * boardHeight) - (playerSize / 2)
+            if math.floor(playdate.getElapsedTime() * 4) % 2 == 0 then
+                gfx.setColor(gfx.kColorWhite)
+                gfx.fillEllipseInRect(targetX, targetY, playerSize / 2, playerSize / 2)
+                gfx.setColor(gfx.kColorBlack)
+                gfx.drawEllipseInRect(targetX - 2, targetY - 2, playerSize + 4, playerSize + 4)
+            else
+                gfx.setColor(gfx.kColorBlack)
+                gfx.fillEllipseInRect(targetX, targetY, playerSize / 2, playerSize / 2)
+                gfx.setColor(gfx.kColorWhite)
+                gfx.drawEllipseInRect(targetX, targetY, playerSize / 2, playerSize / 2)
+            end
+        end
+    elseif gameState == "ROOM_VIEW" then
+        if currentRoom and currentRoom.img then
+            currentRoom.img:draw(0, 20)
+        else
+            gfx.drawText("Error: Room asset missing!", 20, 20)
+        end
+        if currentRoom then
+            for i = 1, #suspects do
+                local suspect = suspects[i]
+                if suspect.assignedRoomName == currentRoom.name then
+                    local localSuspectX = suspect.worldX - currentRoom.x
+                    local localSuspectY = (suspect.worldY - currentRoom.y) + 20
+                    if suspect.img then
+                        suspect.img:draw(localSuspectX, localSuspectY)
+                    else
+                        gfx.setColor(gfx.kColorBlack)
+                        gfx.fillEllipseInRect(localSuspectX, localSuspectY, playerSize, playerSize)
+                        gfx.setColor(gfx.kColorWhite)
+                        gfx.drawEllipseInRect(localSuspectX, localSuspectY, playerSize, playerSize)
+                    end
+                end
+            end
+        end
+        local localPlayerX = 200
+        local localPlayerY = 120
+        if currentRoom then
+            localPlayerX = playerX - currentRoom.x
+            localPlayerY = (playerY - currentRoom.y) + 20
+        end
+        if playerSpriteImage then
+            playerSpriteImage:draw(localPlayerX, localPlayerY)
+        else
+            gfx.setColor(gfx.kColorWhite)
+            gfx.fillEllipseInRect(localPlayerX, localPlayerY, playerSize, playerSize)
+            gfx.setColor(gfx.kColorBlack)
+            gfx.drawEllipseInRect(localPlayerX, localPlayerY, playerSize, playerSize)
+        end
+        gfx.setColor(gfx.kColorBlack)
+        gfx.fillRect(0, 0, SCREEN_WIDTH, 20)
+        gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
+        gfx.drawText(string.format("STEPS: %i | ACCUSATIONS: %i", playerTilesLeft, totalAccusationsLeft), 10, 2)
+        gfx.setColor(gfx.kColorBlack)
+        gfx.fillRect(0, SCREEN_HEIGHT - 20, SCREEN_WIDTH, 20)
+        local roomName = currentRoom and currentRoom.name or "Unknown"
+        local debugText = string.format("%s | World: %i,%i | Room: %i,%i", roomName, playerX, playerY, localPlayerX, localPlayerY - 20)
+        gfx.drawText(debugText, 6, SCREEN_HEIGHT - 18)
+        gfx.setImageDrawMode(gfx.kDrawModeCopy)
+    elseif gameState == "NOTEPAD" then
+        gfx.setImageDrawMode(gfx.kDrawModeCopy)
+        gfx.setColor(gfx.kColorBlack)
+        gfx.drawText("DETECTIVE NOTEPAD", 125, 8)
+        gfx.drawLine(20, 24, 380, 24)
+        local maxRows = 8
+        for i = 1, maxRows do
+            local itemIndex = i + scrollOffset
+            if itemIndex <= #checklist then
+                local currentY = 32 + ((i - 1) * 22)
+                local item = checklist[itemIndex]
+                if item.isHeader then
+                    gfx.drawText(item.category, 120, currentY)
+                else
+                    if itemIndex == selectedIndex then
+                        gfx.drawText("->", 15, currentY)
+                    end
+                    gfx.drawRect(45, currentY + 2, 11, 11)
+                    if item.checked then
+                        gfx.drawText("X", 47, currentY - 1)
+                        gfx.drawLine(65, currentY + 7, 300, currentY + 7) -- FIXED: Repaired mask rendering typo
+                    end
+                    gfx.drawText(item.name, 65, currentY)
+                end
+            end
+        end
     elseif gameState == "DIALOGUE" then
         if currentRoom and currentRoom.img then
             currentRoom.img:draw(0, 20)
@@ -1171,134 +1210,131 @@ end
         gfx.drawRect(17, SCREEN_HEIGHT - 73, SCREEN_WIDTH - 34, 56)
         gfx.drawText(activeSpeaker:upper(), 25, SCREEN_HEIGHT - 70)
         gfx.drawTextInRect(dialogueText, 25, SCREEN_HEIGHT - 52, SCREEN_WIDTH - 50, 35, 0, gfx.kTextAlignLeft)
-        
         if math.floor(playdate.getElapsedTime() * 3) % 2 == 0 then
             gfx.drawText("(B) BACK", SCREEN_WIDTH - 375, SCREEN_HEIGHT - 35)
             
-            -- Fetch active suspect position reference for prompt evaluation
             local activeRef = nil
             for i = 1, #suspects do
                 if suspects[i].name == activeSpeaker then activeRef = suspects[i]; break end
             end
-            
-            -- ANTI-FARMING HUD FIX: Only display the prompt if the suspect is still in this room!
             if not isCrossedOff(activeSpeaker) and (activeRef and currentRoom and activeRef.assignedRoomName == currentRoom.name) then
                 gfx.drawText("(A) ACCUSE", SCREEN_WIDTH - 110, SCREEN_HEIGHT - 35)
             end
         end
-elseif gameState == "ACCUSE_CONFIRM" then
-if currentRoom and currentRoom.img then currentRoom.img:draw(0, 20) end
-gfx.setColor(gfx.kColorBlack)
-gfx.fillRect(20, 40, SCREEN_WIDTH - 40, SCREEN_HEIGHT - 80)
-gfx.setColor(gfx.kColorWhite)
-gfx.drawRect(20, 40, SCREEN_WIDTH - 40, SCREEN_HEIGHT - 80)
-gfx.drawRect(22, 42, SCREEN_WIDTH - 44, SCREEN_HEIGHT - 84)
-gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
-gfx.drawText("CRITICAL ACCUSATION PROMPT", 100, 55)
-gfx.drawLine(40, 75, 360, 75)
-local linesText = string.format("Are you absolutely sure you want to formally accuse %s of committing the crime?", activeSpeaker:upper())
-gfx.drawTextInRect(linesText, 40, 95, SCREEN_WIDTH - 80, 50, 0, gfx.kTextAlignCenter)
-gfx.drawText("(A) CONFIRM SUSPECT", SCREEN_WIDTH - 200, SCREEN_HEIGHT - 70)
-gfx.drawText("(B) CANCEL", SCREEN_WIDTH - 360, SCREEN_HEIGHT - 70)
-gfx.setImageDrawMode(gfx.kDrawModeCopy)
-elseif gameState == "ACCUSE_WEAPON" then
-if currentRoom and currentRoom.img then currentRoom.img:draw(0, 20) end
-gfx.setColor(gfx.kColorBlack)
-gfx.fillRect(30, 30, SCREEN_WIDTH - 60, SCREEN_HEIGHT - 60)
-gfx.setColor(gfx.kColorWhite)
-gfx.drawRect(30, 30, SCREEN_WIDTH - 60, SCREEN_HEIGHT - 60)
-gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
-gfx.drawText("SELECT MURDER WEAPON", 110, 40)
-gfx.drawLine(45, 58, 355, 58)
-for i = 1, #dynamicWeapons do
-local currentY = 65 + ((i - 1) * 18)
-if i == accuseWeaponIndex then
-gfx.drawText("-> " .. dynamicWeapons[i]:upper(), 130, currentY)
-else
-gfx.drawText(dynamicWeapons[i], 150, currentY)
-end
-end
-gfx.drawText("(A) CONFIRM WEAPON", SCREEN_WIDTH - 205, SCREEN_HEIGHT - 52)
-gfx.drawText("(B) GO BACK", SCREEN_WIDTH - 355, SCREEN_HEIGHT - 52)
-gfx.setImageDrawMode(gfx.kDrawModeCopy)
-elseif gameState == "ACCUSE_ROOM" then
-if currentRoom and currentRoom.img then currentRoom.img:draw(0, 20) end
-gfx.setColor(gfx.kColorBlack)
-gfx.fillRect(30, 22, SCREEN_WIDTH - 60, SCREEN_HEIGHT - 44)
-gfx.setColor(gfx.kColorWhite)
-gfx.drawRect(30, 22, SCREEN_WIDTH - 60, SCREEN_HEIGHT - 44)
-gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
-gfx.drawText("SELECT CRIME SCENE", 110, 28)
-gfx.drawLine(45, 44, 355, 44)
-for i = 1, #dynamicRooms do
-local currentY = 48 + ((i - 1) * 15)
-if i == accuseRoomIndex then
-gfx.drawText("-> " .. dynamicRooms[i]:upper(), 110, currentY)
-else
-gfx.drawText(dynamicRooms[i], 130, currentY)
-end
-end
-gfx.drawText("(A) CONFIRM ROOM", SCREEN_WIDTH - 185, SCREEN_HEIGHT - 42)
-gfx.drawText("(B) GO BACK", SCREEN_WIDTH - 355, SCREEN_HEIGHT - 42)
-gfx.setImageDrawMode(gfx.kDrawModeCopy)
-elseif gameState == "ACCUSE_SUMMARY" then
-if currentRoom and currentRoom.img then currentRoom.img:draw(0, 20) end
-gfx.setColor(gfx.kColorBlack)
-gfx.fillRect(20, 35, SCREEN_WIDTH - 40, SCREEN_HEIGHT - 70)
-gfx.setColor(gfx.kColorWhite)
-gfx.drawRect(20, 35, SCREEN_WIDTH - 40, SCREEN_HEIGHT - 70)
-gfx.drawRect(22, 37, SCREEN_WIDTH - 44, SCREEN_HEIGHT - 74)
-gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
-gfx.drawText("FINAL ACCUSATION", 105, 45)
-gfx.drawLine(40, 65, 360, 65)
-gfx.drawText("SUSPECT : " .. activeSpeaker:upper(), 60, 85)
-gfx.drawText("WEAPON : " .. finalAccuseWeapon:upper(), 60, 110)
-gfx.drawText("ROOM : " .. finalAccuseRoom:upper(), 60, 135)
-gfx.drawText("(A) ACCUSE!", SCREEN_WIDTH - 135, SCREEN_HEIGHT - 60)
-gfx.drawText("(B) GO BACK", SCREEN_WIDTH - 350, SCREEN_HEIGHT - 60)
-gfx.setImageDrawMode(gfx.kDrawModeCopy)
-elseif gameState == "REVEAL_ENVELOPE" then
-if currentRoom and currentRoom.img then
-currentRoom.img:draw(0, 20)
-elseif roomBackgrounds.mansion then
-roomBackgrounds.mansion:draw(-cameraX, -cameraY)
-end
-gfx.setColor(gfx.kColorBlack)
-gfx.fillRect(30, 25, SCREEN_WIDTH - 60, SCREEN_HEIGHT - 50)
-gfx.setColor(gfx.kColorWhite)
-gfx.drawRect(30, 25, SCREEN_WIDTH - 60, SCREEN_HEIGHT - 50)
-gfx.drawRect(32, 27, SCREEN_WIDTH - 64, SCREEN_HEIGHT - 54)
-gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
-gfx.drawText("TOP SECRET CASE FILE", 115, 38)
-gfx.drawLine(45, 56, 355, 56)
-gfx.drawText("KILLER : " .. caseFile.killer:upper(), 60, 75)
-gfx.drawText("WEAPON : " .. caseFile.weapon:upper(), 60, 105)
-gfx.drawText("ROOM : " .. caseFile.room:upper(), 60, 135)
-gfx.drawLine(45, 170, 355, 170)
-gfx.drawText("PRESS (A) TO CLOSE CASE ENVELOPE", 65, 185)
-gfx.setImageDrawMode(gfx.kDrawModeCopy)
-elseif gameState == "GAME_OVER" then
-if gameOverImage then
-gameOverImage:draw(0, 0)
-else
-gfx.setColor(gfx.kColorBlack)
-gfx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
-gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
-gfx.drawTextAligned("INVESTIGATION CONCLUDED", SCREEN_WIDTH / 2, 80, gfx.kTextAlignmentCenter)
-end
-gfx.setImageDrawMode(gfx.kDrawModeCopy)
-gfx.drawTextAligned("(A) Play Again", SCREEN_WIDTH / 5, 190, gfx.kTextAlignmentCenter)
-elseif gameState == "PAUSE" then
-if pauseImage then
-pauseImage:draw(0, 0)
-gfx.drawTextAligned("Press (B) to Resume", SCREEN_WIDTH / 3.3, SCREEN_HEIGHT - 45, gfx.kTextAlignmentCenter)
-else
-gfx.setColor(gfx.kColorBlack)
-gfx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
-gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
-gfx.drawTextAligned("GAME PAUSED", SCREEN_WIDTH / 2, 100, gfx.kTextAlignmentCenter)
-gfx.drawTextAligned("Press (B) to Resume", SCREEN_WIDTH / 2, 140, gfx.kTextAlignmentCenter)
-end
-gfx.setImageDrawMode(gfx.kDrawModeCopy)
-end
+       elseif gameState == "ACCUSE_CONFIRM" then
+        if currentRoom and currentRoom.img then currentRoom.img:draw(0, 20) end
+        gfx.setColor(gfx.kColorBlack)
+        gfx.fillRect(20, 40, SCREEN_WIDTH - 40, SCREEN_HEIGHT - 80)
+        gfx.setColor(gfx.kColorWhite)
+        gfx.drawRect(20, 40, SCREEN_WIDTH - 40, SCREEN_HEIGHT - 80)
+        gfx.drawRect(22, 42, SCREEN_WIDTH - 44, SCREEN_HEIGHT - 84)
+        gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
+        gfx.drawText("CRITICAL ACCUSATION PROMPT", 100, 55)
+        gfx.drawLine(40, 75, 360, 75)
+        local linesText = string.format("Are you absolutely sure you want to formally accuse %s of committing the crime?", activeSpeaker:upper())
+        gfx.drawTextInRect(linesText, 40, 95, SCREEN_WIDTH - 80, 50, 0, gfx.kTextAlignCenter)
+        gfx.drawText("(A) CONFIRM SUSPECT", SCREEN_WIDTH - 200, SCREEN_HEIGHT - 70)
+        gfx.drawText("(B) CANCEL", SCREEN_WIDTH - 360, SCREEN_HEIGHT - 70)
+        gfx.setImageDrawMode(gfx.kDrawModeCopy)
+    elseif gameState == "ACCUSE_WEAPON" then
+        if currentRoom and currentRoom.img then currentRoom.img:draw(0, 20) end
+        gfx.setColor(gfx.kColorBlack)
+        gfx.fillRect(30, 30, SCREEN_WIDTH - 60, SCREEN_HEIGHT - 60)
+        gfx.setColor(gfx.kColorWhite)
+        gfx.drawRect(30, 30, SCREEN_WIDTH - 60, SCREEN_HEIGHT - 60)
+        gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
+        gfx.drawText("SELECT MURDER WEAPON", 110, 40)
+        gfx.drawLine(45, 58, 355, 58)
+        for i = 1, #dynamicWeapons do
+            local currentY = 65 + ((i - 1) * 18)
+            if i == accuseWeaponIndex then
+                gfx.drawText("-> " .. dynamicWeapons[i]:upper(), 130, currentY)
+            else
+                gfx.drawText(dynamicWeapons[i], 150, currentY)
+            end
+        end
+        gfx.drawText("(A) CONFIRM WEAPON", SCREEN_WIDTH - 205, SCREEN_HEIGHT - 52)
+        gfx.drawText("(B) GO BACK", SCREEN_WIDTH - 355, SCREEN_HEIGHT - 52)
+        gfx.setImageDrawMode(gfx.kDrawModeCopy)
+    elseif gameState == "ACCUSE_ROOM" then
+        -- FULLY RESTORED: This is the missing rendering pipeline for the Crime Scene Selector
+        if currentRoom and currentRoom.img then currentRoom.img:draw(0, 20) end
+        gfx.setColor(gfx.kColorBlack)
+        gfx.fillRect(30, 22, SCREEN_WIDTH - 60, SCREEN_HEIGHT - 44)
+        gfx.setColor(gfx.kColorWhite)
+        gfx.drawRect(30, 22, SCREEN_WIDTH - 60, SCREEN_HEIGHT - 44)
+        gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
+        gfx.drawText("SELECT CRIME SCENE", 110, 28)
+        gfx.drawLine(45, 44, 355, 44)
+        for i = 1, #dynamicRooms do
+            local currentY = 48 + ((i - 1) * 15)
+            if i == accuseRoomIndex then
+                gfx.drawText("-> " .. dynamicRooms[i]:upper(), 110, currentY)
+            else
+                gfx.drawText(dynamicRooms[i], 130, currentY)
+            end
+        end
+        gfx.drawText("(A) CONFIRM ROOM", SCREEN_WIDTH - 185, SCREEN_HEIGHT - 42)
+        gfx.drawText("(B) GO BACK", SCREEN_WIDTH - 355, SCREEN_HEIGHT - 42)
+        gfx.setImageDrawMode(gfx.kDrawModeCopy)
+    elseif gameState == "ACCUSE_SUMMARY" then
+        if currentRoom and currentRoom.img then currentRoom.img:draw(0, 20) end
+        gfx.setColor(gfx.kColorBlack)
+        gfx.fillRect(20, 35, SCREEN_WIDTH - 40, SCREEN_HEIGHT - 70)
+        gfx.setColor(gfx.kColorWhite)
+        gfx.drawRect(20, 35, SCREEN_WIDTH - 40, SCREEN_HEIGHT - 70)
+        gfx.drawRect(22, 37, SCREEN_WIDTH - 44, SCREEN_HEIGHT - 74)
+        gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
+        gfx.drawText("FINAL ACCUSATION", 105, 45)
+        gfx.drawLine(40, 65, 360, 65)
+        gfx.drawText("SUSPECT : " .. activeSpeaker:upper(), 60, 85)
+        gfx.drawText("WEAPON : " .. finalAccuseWeapon:upper(), 60, 110)
+        gfx.drawText("ROOM : " .. finalAccuseRoom:upper(), 60, 135)
+        gfx.drawText("(A) ACCUSE!", SCREEN_WIDTH - 135, SCREEN_HEIGHT - 60)
+        gfx.drawText("(B) GO BACK", SCREEN_WIDTH - 350, SCREEN_HEIGHT - 60)
+        gfx.setImageDrawMode(gfx.kDrawModeCopy)
+    elseif gameState == "REVEAL_ENVELOPE" then
+        if currentRoom and currentRoom.img then
+            currentRoom.img:draw(0, 20)
+        elseif roomBackgrounds.mansion then
+            roomBackgrounds.mansion:draw(-cameraX, -cameraY)
+        end
+        gfx.setColor(gfx.kColorBlack)
+        gfx.fillRect(30, 25, SCREEN_WIDTH - 60, SCREEN_HEIGHT - 50)
+        gfx.setColor(gfx.kColorWhite)
+        gfx.drawRect(30, 25, SCREEN_WIDTH - 60, SCREEN_HEIGHT - 50)
+        gfx.drawRect(32, 27, SCREEN_WIDTH - 64, SCREEN_HEIGHT - 54)
+        gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
+        gfx.drawText("TOP SECRET CASE FILE", 115, 38)
+        gfx.drawLine(45, 56, 355, 56)
+        gfx.drawText("KILLER : " .. caseFile.killer:upper(), 60, 75)
+        gfx.drawText("WEAPON : " .. caseFile.weapon:upper(), 60, 105)
+        gfx.drawText("ROOM : " .. caseFile.room:upper(), 60, 135)
+        gfx.drawLine(45, 170, 355, 170)
+        gfx.drawText("PRESS (A) TO CLOSE CASE ENVELOPE", 65, 185)
+        gfx.setImageDrawMode(gfx.kDrawModeCopy)
+    elseif gameState == "GAME_OVER" then
+        if gameOverImage then
+            gameOverImage:draw(0, 0)
+        else
+            gfx.setColor(gfx.kColorBlack)
+            gfx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
+            gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
+            gfx.drawTextAligned("INVESTIGATION CONCLUDED", SCREEN_WIDTH / 2, 80, gfx.kTextAlignmentCenter)
+        end
+        gfx.setImageDrawMode(gfx.kDrawModeCopy)
+        gfx.drawTextAligned("(A) Play Again", SCREEN_WIDTH / 5, 190, gfx.kTextAlignmentCenter)
+    elseif gameState == "PAUSE" then
+        if pauseImage then
+            pauseImage:draw(0, 0)
+            gfx.drawTextAligned("Press (B) to Resume", SCREEN_WIDTH / 3.3, SCREEN_HEIGHT - 45, gfx.kTextAlignmentCenter)
+        else
+            gfx.setColor(gfx.kColorBlack)
+            gfx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
+            gfx.setImageDrawMode(gfx.kDrawModeFillWhite)            
+            gfx.drawTextAligned("GAME PAUSED", SCREEN_WIDTH / 2, 100, gfx.kTextAlignmentCenter)
+            gfx.drawTextAligned("Press (B) to Resume", SCREEN_WIDTH / 2, 140, gfx.kTextAlignmentCenter)
+        end
+        gfx.setImageDrawMode(gfx.kDrawModeCopy)
+    end
 end
