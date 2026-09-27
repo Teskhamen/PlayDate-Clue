@@ -1,3 +1,4 @@
+-- main.lua
 import "CoreLibs/graphics"
 import "CoreLibs/sprites"
 import "CoreLibs/ui"
@@ -36,6 +37,15 @@ local stateBeforePause = "MAP"
 local dynamicKillers = {}
 local dynamicWeapons = {}
 local dynamicRooms   = {}
+
+-- ==========================================================
+-- MUSIC AUDIO STORAGE CONFIGURATION
+-- ==========================================================
+local titleMusic, titleMusicErr = playdate.sound.fileplayer.new("audio/intro music")
+if titleMusicErr then print("Audio Loading Alert (Intro Theme): " .. tostring(titleMusicErr)) end
+
+local gameMusic, gameMusicErr = playdate.sound.fileplayer.new("audio/game music")
+if gameMusicErr then print("Audio Loading Alert (Game Theme): " .. tostring(gameMusicErr)) end
 
 -- Load your mask layout safely
 local maskImage = gfx.image.new("images/mask_map")
@@ -245,15 +255,14 @@ local function populateDynamicLists()
     
     local sortingMode = "NONE"
     for _, row in ipairs(checklist) do
-        if row.isHeader then
-            if string.find(row.category, "KILLERS") then sortingMode = "KILLER"
-            elseif string.find(row.category, "WEAPONS") then sortingMode = "WEAPON"
-            elseif string.find(row.category, "ROOMS") then sortingMode = "ROOM" end
-        else
-            if not row.checked then
-                if sortingMode == "KILLER" then table.insert(dynamicKillers, row.name)
-                elseif sortingMode == "WEAPON" then table.insert(dynamicWeapons, row.name)
-
+if row.isHeader then
+if string.find(row.category, "KILLERS") then sortingMode = "KILLER"
+elseif string.find(row.category, "WEAPONS") then sortingMode = "WEAPON"
+elseif string.find(row.category, "ROOMS") then sortingMode = "ROOM" end
+else
+if not row.checked then
+if sortingMode == "KILLER" then table.insert(dynamicKillers, row.name)
+elseif sortingMode == "WEAPON" then table.insert(dynamicWeapons, row.name)
 elseif sortingMode == "ROOM" then table.insert(dynamicRooms, row.name) end
 end
 end
@@ -262,6 +271,8 @@ if #dynamicKillers == 0 then table.insert(dynamicKillers, caseFile.killer) end
 if #dynamicWeapons == 0 then table.insert(dynamicWeapons, caseFile.weapon) end
 if #dynamicRooms == 0 then table.insert(dynamicRooms, caseFile.room) end
 end
+
+
 -- ==========================================================
 -- MASTER GAME ENGINE SYSTEM RESET INTERFACE
 -- ==========================================================
@@ -347,6 +358,7 @@ gameState = "PAUSE"
 end
 end)
 local restartMenuItem, error = menu:addMenuItem("Restart Game", function()
+if gameMusic then gameMusic:stop() end
 resetGameEngine()
 gameState = "TITLE"
 end)
@@ -783,6 +795,7 @@ if gameState == "PAUSE" then
 return
 end
 if gameState == "GAME_OVER" then
+if gameMusic then gameMusic:stop() end
 resetGameEngine()
 gameState = "TITLE"
 return
@@ -792,6 +805,10 @@ gameState = "TUTORIAL"
 return
 end
 if gameState == "TUTORIAL" then
+if titleMusic then titleMusic:stop() end
+if gameMusic and not gameMusic:isPlaying() then
+gameMusic:play(0)
+end
 gameState = "MAP"
 return
 end
@@ -847,6 +864,9 @@ gfx.clear()
 handleDpadInput()
 handleCrankInput()
 if gameState == "TITLE" then
+if titleMusic and not titleMusic:isPlaying() then
+titleMusic:play(0)
+end
 if titleImage then
 titleImage:draw(0, 0)
 else
@@ -872,33 +892,28 @@ local drawY = 48 - tutorialScrollY
 local wrapW = SCREEN_WIDTH - 64 -- Safe wrapping width preventing overflow
 -- FIXED: Body Content items now use drawTextInRect with auto-wrap boundaries [1]
 -- MISSION OBJECTIVE SECTION
-        gfx.drawText("MISSION OBJECTIVE:", 24, drawY)
-        gfx.drawText("Find the hidden combination of Killer, Weapon,", 24, drawY + 18)
-        gfx.drawText("and Room sealed inside the secret envelope.", 24, drawY + 34)
-        
-        -- STEP BUDGET SECTION
-        gfx.drawText("STEP BUDGET:", 24, drawY + 68)
-        gfx.drawText("You begin with 1000 steps. Moving subtracts", 24, drawY + 86)
-        gfx.drawText("steps from your pool automatically.", 24, drawY + 102)
-        gfx.drawText("If steps hit 0 before you solve it, you lose!", 24, drawY + 118)
-        
-        -- INVESTIGATION CONTROLS SECTION
-        gfx.drawText("INVESTIGATION CONTROLS:", 24, drawY + 152)
-        gfx.drawText("- D-Pad: Move character through corridors.", 24, drawY + 170)
-        gfx.drawText("- Crank: Turn crank to open the Full Map", 24, drawY + 186)
-        gfx.drawText("  and scroll through the Notebook checklist.", 24, drawY + 202)
-        gfx.drawText("- (B) Button: Open/Close your Notepad log.", 24, drawY + 218)
-        gfx.drawText("- (A) Button: Confirm choices or accuse.", 24, drawY + 234)
-       
-        -- DETECTION TIPS SECTION
-        gfx.drawText("DETECTION TIPS:", 24, drawY + 268)
-        gfx.drawText("Walk up to suspects inside rooms. They will", 24, drawY + 286)
-        gfx.drawText("show you structural clues to automatically", 24, drawY + 302)
-        gfx.drawText("cross proven false entries off your notepad.", 24, drawY + 318)
-        
-        gfx.clearClipRect()
-       
-        -- Footer Prompt (Uniform background, no blocking box overlays) [1]
+gfx.drawText("MISSION OBJECTIVE:", 24, drawY)
+gfx.drawText("Find the hidden combination of Killer, Weapon,", 24, drawY + 18)
+gfx.drawText("and Room sealed inside the secret envelope.", 24, drawY + 34)
+-- STEP BUDGET SECTION
+gfx.drawText("STEP BUDGET:", 24, drawY + 68)
+gfx.drawText("You begin with 1000 steps. Moving subtracts", 24, drawY + 86)
+gfx.drawText("steps from your pool automatically.", 24, drawY + 102)
+gfx.drawText("If steps hit 0 before you solve it, you lose!", 24, drawY + 118)
+-- INVESTIGATION CONTROLS SECTION
+gfx.drawText("INVESTIGATION CONTROLS:", 24, drawY + 152)
+gfx.drawText("- D-Pad: Move character through corridors.", 24, drawY + 170)
+gfx.drawText("- Crank: Turn crank to open the Full Map", 24, drawY + 186)
+gfx.drawText(" and scroll through the Notebook checklist.", 24, drawY + 202)
+gfx.drawText("- (B) Button: Open/Close your Notepad log.", 24, drawY + 218)
+gfx.drawText("- (A) Button: Confirm choices or accuse.", 24, drawY + 234)
+-- DETECTION TIPS SECTION
+gfx.drawText("DETECTION TIPS:", 24, drawY + 268)
+gfx.drawText("Walk up to suspects inside rooms. They will", 24, drawY + 286)
+gfx.drawText("show you structural clues to automatically", 24, drawY + 302)
+gfx.drawText("cross proven false entries off your notepad.", 24, drawY + 318)
+gfx.clearClipRect()
+-- Footer Prompt (Uniform background, no blocking box overlays) [1]
 gfx.fillRect(20, 194, SCREEN_WIDTH - 40, 1)
 if math.floor(playdate.getElapsedTime() * 3) % 2 == 0 then
 gfx.drawTextAligned("PRESS (A) TO START", SCREEN_WIDTH / 3, 206, gfx.kTextAlignmentCenter)
@@ -1171,7 +1186,6 @@ elseif gameState == "PAUSE" then
 if pauseImage then
 pauseImage:draw(0, 0)
 gfx.drawTextAligned("Press (B) to Resume", SCREEN_WIDTH / 3.3, SCREEN_HEIGHT - 45, gfx.kTextAlignmentCenter)
-
 else
 gfx.setColor(gfx.kColorBlack)
 gfx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
@@ -1182,4 +1196,8 @@ end
 gfx.setImageDrawMode(gfx.kDrawModeCopy)
 end
 end
+
+
+
+
 
